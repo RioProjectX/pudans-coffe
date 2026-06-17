@@ -1,0 +1,17 @@
+{
+  "short_name": "Pudans POS",
+  "name": "Pudans Coffee POS - Premium Kasir",
+  "icons": [
+    {
+      "src": "/icon_512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#F9F6F0",
+  "theme_color": "#3C2A21",
+  "display": "standalone",
+  "orientation": "portrait"
+}
