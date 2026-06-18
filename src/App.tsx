@@ -6,13 +6,14 @@ import POS from './components/POS';
 import Catalog from './components/Catalog';
 import History from './components/History';
 import ReceiptModal from './components/ReceiptModal';
+import PendingOrders from './components/PendingOrders';
 import { Coffee, LayoutDashboard, ShoppingBag, FolderOpen, Receipt, Clock } from 'lucide-react';
 import { collection, onSnapshot, setDoc, deleteDoc, doc, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from './lib/firebase';
 
 export default function App() {
   // Navigation
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'POS' | 'CATALOG' | 'HISTORY'>('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'POS' | 'PENDING' | 'CATALOG' | 'HISTORY'>('DASHBOARD');
 
   // Core Synchronization States loaded from Firebase Cloud Database
   const [products, setProducts] = useState<Product[]>([]);
@@ -22,7 +23,7 @@ export default function App() {
   const [activeReceipt, setActiveReceipt] = useState<Transaction | null>(null);
 
   // Digital Live Clock
-  const [currentTime, setCurrentTime] = useState(new Date('2026-06-17T10:41:00-07:00'));
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   // Live Sync Products from Firestore with first-time automatic seeding
   useEffect(() => {
@@ -74,8 +75,7 @@ export default function App() {
   // Update clock every second
   useEffect(() => {
     const timer = setInterval(() => {
-      // Advance clock matching actual date
-      setCurrentTime(prev => new Date(prev.getTime() + 1000));
+      setCurrentTime(new Date());
     }, 1000);
     return () => clearInterval(timer);
   }, []);
@@ -146,6 +146,7 @@ export default function App() {
       id: invoiceId,
       timestamp: currentTime.toISOString(),
       ...details,
+      paymentStatus: 'Belum Bayar'
     };
 
     try {
@@ -154,6 +155,14 @@ export default function App() {
       setActiveReceipt(freshTx);
     } catch (error) {
       console.error('Error recording checkout transaction to Firestore:', error);
+    }
+  };
+
+  const handleConfirmPayment = async (txId: string) => {
+    try {
+      await setDoc(doc(db, 'transactions', txId), { paymentStatus: 'Sudah Bayar' }, { merge: true });
+    } catch (error) {
+      console.error('Error confirming payment in Firestore:', error);
     }
   };
 
@@ -194,11 +203,14 @@ export default function App() {
             {([
               { id: 'DASHBOARD', label: 'Monitor', icon: LayoutDashboard },
               { id: 'POS', label: 'Kasir (POS)', icon: ShoppingBag },
+              { id: 'PENDING', label: 'Pesanan Diterima', icon: Clock },
               { id: 'CATALOG', label: 'Katalog Menu', icon: FolderOpen },
               { id: 'HISTORY', label: 'Riwayat Struk', icon: Receipt },
             ] as const).map((tab) => {
               const TabIcon = tab.icon;
               const isSelected = activeTab === tab.id;
+              const pendingCount = transactions.filter(t => t.paymentStatus === 'Belum Bayar').length;
+
               return (
                 <button
                   key={tab.id}
@@ -211,6 +223,11 @@ export default function App() {
                 >
                   <TabIcon size={14} />
                   <span>{tab.label}</span>
+                  {tab.id === 'PENDING' && pendingCount > 0 && (
+                    <span className="px-1.5 py-0.2 bg-rose-500 text-white text-[9px] rounded-full font-bold font-mono animate-bounce">
+                      {pendingCount}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -236,6 +253,13 @@ export default function App() {
             <POS 
               products={products}
               onCheckout={handleCheckout}
+            />
+          )}
+
+          {activeTab === 'PENDING' && (
+            <PendingOrders 
+              transactions={transactions}
+              onConfirmPayment={handleConfirmPayment}
             />
           )}
 

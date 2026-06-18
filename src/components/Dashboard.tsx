@@ -48,6 +48,7 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
     let trxMingguIni = 0;
 
     transactions.forEach(t => {
+      if (t.paymentStatus === 'Belum Bayar') return;
       const tDate = new Date(t.timestamp);
       const val = t.total;
 
@@ -107,6 +108,7 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
 
     // Populate buckets
     transactions.forEach(t => {
+      if (t.paymentStatus === 'Belum Bayar') return;
       const tKey = t.timestamp.split('T')[0];
       const match = days.find(d => d.dateKey === tKey);
       if (match) {
@@ -174,6 +176,7 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
     const itemMap: Record<string, { product: Product; qty: number; revenue: number }> = {};
     
     transactions.forEach(t => {
+      if (t.paymentStatus === 'Belum Bayar') return;
       t.items.forEach(item => {
         const prod = products.find(p => p.id === item.productId);
         if (!prod) return;
@@ -196,6 +199,7 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
     let totalRev = 0;
     
     transactions.forEach(t => {
+      if (t.paymentStatus === 'Belum Bayar') return;
       t.items.forEach(item => {
         const cat = item.category || 'KOPI';
         if (cat in counts) {
@@ -226,6 +230,7 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
 
   const latestTransactions = useMemo(() => {
     return [...transactions]
+      .filter(t => t.paymentStatus !== 'Belum Bayar')
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 5);
   }, [transactions]);

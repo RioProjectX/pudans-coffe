@@ -47,6 +47,10 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
     const today = new Date('2026-06-17T10:41:00-07:00');
     
     return transactions.filter(t => {
+      // 0. Check payment status
+      const isPaid = t.paymentStatus === 'Sudah Bayar' || !t.paymentStatus;
+      if (!isPaid) return false;
+
       // 1. Search Query
       const matchSearch = 
         t.id.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -159,15 +163,16 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
               <p className="text-[11px] max-w-xs text-stone-400">Silakan ubah filter pencarian Anda atau buat transaksi baru dari mesin Kasir.</p>
             </div>
           ) : (
-            <div className="divide-y divide-stone-100 min-w-full">
+            <div className="divide-y divide-stone-100 min-w-full font-sans">
               {/* Table header hidden on mobile */}
               <div className="hidden md:flex justify-between items-center px-4 py-3 bg-stone-50 text-[10px] uppercase font-bold text-stone-400 font-mono tracking-wider">
-                <span className="w-40">No. Transaksi</span>
-                <span className="w-56">Tanggal &amp; Waktu</span>
-                <span className="w-36">Pelanggan</span>
+                <span className="w-32">No. Transaksi</span>
+                <span className="w-48">Tanggal &amp; Waktu</span>
+                <span className="w-32">Pelanggan</span>
                 <span className="w-24">Metode</span>
+                <span className="w-28 text-center">Status</span>
                 <span className="w-28 text-right">Total Tagihan</span>
-                <span className="w-16"></span>
+                <span className="w-12"></span>
               </div>
 
               {filteredTransactions.map((tx) => (
@@ -179,7 +184,7 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
                   `}
                 >
                   {/* Tx code */}
-                  <div className="w-full md:w-40 flex items-center gap-2 justify-between md:justify-start">
+                  <div className="w-full md:w-32 flex items-center gap-2 justify-between md:justify-start">
                     <span className="font-bold font-mono text-[#3C2A21]">{tx.id}</span>
                     <span className={`block md:hidden text-[10px] font-mono px-2 py-0.5 rounded-md font-semibold
                       ${tx.paymentMethod === 'QRIS' ? 'bg-sky-100 text-sky-800' : 'bg-emerald-100 text-emerald-800'}`}>
@@ -188,12 +193,12 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
                   </div>
 
                   {/* Stamp */}
-                  <div className="w-full md:w-56 text-stone-500 font-sans mt-1 md:mt-0">
+                  <div className="w-full md:w-48 text-stone-500 font-sans mt-0.5 md:mt-0">
                     {formatDate(tx.timestamp)}
                   </div>
 
                   {/* Customer name */}
-                  <div className="w-full md:w-36 font-semibold text-stone-800 mt-0.5 md:mt-0">
+                  <div className="w-full md:w-32 font-semibold text-stone-800 mt-0.5 md:mt-0">
                     {tx.customerName || <span className="text-stone-400 italic">Walk-In</span>}
                   </div>
 
@@ -205,6 +210,14 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
                     </span>
                   </div>
 
+                  {/* Status Pembayaran badge */}
+                  <div className="w-full md:w-28 mt-1 md:mt-0 text-left md:text-center flex md:block items-center justify-between">
+                    <span className="inline md:hidden text-stone-400 font-sans font-normal">Status:</span>
+                    <span className="bg-emerald-50 text-emerald-700 border border-emerald-150 text-[10px] px-2.5 py-0.2 rounded-full font-bold">
+                      Sudah Bayar
+                    </span>
+                  </div>
+
                   {/* Bill size */}
                   <div className="w-full md:w-28 text-left md:text-right font-bold text-stone-800 font-mono mt-1 md:mt-0 flex md:block items-center justify-between">
                     <span className="inline md:hidden text-stone-400 font-sans font-normal">Total:</span>
@@ -212,9 +225,9 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
                   </div>
 
                   {/* Expand action */}
-                  <div className="hidden md:flex w-16 justify-end">
-                    <button className="text-stone-400 group-hover:text-stone-800 p-1 bg-stone-100 rounded-lg">
-                      <Eye size={13} />
+                  <div className="hidden md:flex w-12 justify-end">
+                    <button className="text-stone-400 group-hover:text-stone-200 p-1 bg-stone-100 rounded-lg">
+                      <Eye size={13} strokeWidth={2} />
                     </button>
                   </div>
                 </div>

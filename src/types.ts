@@ -36,6 +36,7 @@ export interface Transaction {
   changeAmount: number;
   customerName?: string;
   notes?: string;
+  paymentStatus?: 'Belum Bayar' | 'Sudah Bayar';
 }
 
 export interface DayReport {
