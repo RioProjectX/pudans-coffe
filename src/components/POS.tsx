@@ -141,13 +141,8 @@ export default function POS({ products, onCheckout }: POSProps) {
   };
 
   const isCheckoutDisabled = useMemo(() => {
-    if (cart.length === 0) return true;
-    if (paymentMethod === 'CASH') {
-      const cashNum = parseFloat(cashAmount) || 0;
-      return cashNum < total;
-    }
-    return false;
-  }, [cart, paymentMethod, cashAmount, total]);
+    return cart.length === 0;
+  }, [cart]);
 
   // Process checkout transaction
   const handleProcessCheckout = () => {
@@ -328,100 +323,19 @@ export default function POS({ products, onCheckout }: POSProps) {
           </div>
         </div>
 
-        {/* Payment Method selector buttons */}
-        <div className="space-y-2">
-          <label className="text-[10px] text-stone-400 uppercase tracking-wider font-bold">Metode Pembayaran</label>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => {
-                setPaymentMethod('CASH');
-                setCashAmount('');
-              }}
-              className={`py-2 rounded-xl text-xs font-bold transition border flex flex-col items-center justify-center cursor-pointer
-                ${paymentMethod === 'CASH'
-                  ? 'bg-[#3C2A21] border-[#3C2A21] text-white shadow-sm'
-                  : 'bg-white border-stone-200 text-[#3C2A21] hover:bg-stone-100'
-                }`}
-            >
-              💵 Tunai / Cash
-            </button>
-            <button
-              onClick={() => {
-                setPaymentMethod('QRIS');
-                if (cart.length > 0) setShowQRISModal(true);
-              }}
-              className={`py-2 rounded-xl text-xs font-bold transition border flex flex-col items-center justify-center cursor-pointer
-                ${paymentMethod === 'QRIS'
-                  ? 'bg-[#3C2A21] border-[#3C2A21] text-white shadow-sm'
-                  : 'bg-white border-stone-200 text-[#3C2A21] hover:bg-stone-100'
-                }`}
-            >
-              📱 QRIS Dinamis
-            </button>
-          </div>
-        </div>
-
-        {/* Cash input handler panel displayed ONLY when CASH is chosen */}
-        {paymentMethod === 'CASH' && (
-          <div className="space-y-3 animate-fade-in duration-200">
-            {/* Quick cash suggestions bills */}
-            {cashSuggestions.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {cashSuggestions.map((amount) => (
-                  <button
-                    key={amount}
-                    onClick={() => selectCashSuggestion(amount)}
-                    className="flex-grow bg-white hover:bg-stone-100 border border-stone-200 text-stone-800 font-mono text-[11px] font-semibold py-1 rounded-lg transition cursor-pointer text-center"
-                  >
-                    {amount === total ? 'Pas' : amount.toLocaleString('id-ID')}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Physical/Custom Cash received input */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] text-stone-400 uppercase tracking-wider font-bold">Nominal Tunai Diterima</span>
-                {parseFloat(cashAmount) > 0 && parseFloat(cashAmount) < total && (
-                  <span className="text-[10px] font-bold text-rose-500">Nominal Kurang</span>
-                )}
-              </div>
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-xs font-mono font-bold text-stone-500">Rp</span>
-                <input
-                  type="number"
-                  placeholder="Masukkan jumlah uang"
-                  value={cashAmount}
-                  onChange={(e) => setCashAmount(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#D4A373] text-xs font-mono font-bold text-stone-800 bg-white"
-                />
-              </div>
-            </div>
-
-            {/* Real change output calculations */}
-            {parseFloat(cashAmount) >= total && (
-              <div className="flex justify-between items-center bg-[#F4F9F4] p-2.5 rounded-xl border border-[#e4f5e4]">
-                <span className="text-[10px] text-emerald-800 font-semibold uppercase">Kembalian Kasir:</span>
-                <span className="text-xs font-mono font-black text-emerald-800">{formatIDR(changeValue)}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Checkout Final Core Action CTA Button */}
+        {/* Simplification: Just a button to place the order to the queue */}
         <button
           id="checkout-complete-btn"
-          disabled={isCheckoutDisabled}
+          disabled={cart.length === 0}
           onClick={handleProcessCheckout}
           className={`w-full py-3.5 rounded-2xl font-bold text-xs transition duration-200 flex items-center justify-center gap-2 shadow-lg cursor-pointer
-            ${isCheckoutDisabled
+            ${cart.length === 0
               ? 'bg-stone-200 text-stone-400 cursor-not-allowed shadow-none border border-stone-100'
-              : 'bg-[#3C2A21] hover:bg-[#2A1D17] text-white shadow-[#3C2A21]/20 transform active:scale-98'
+              : 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20 transform active:scale-98'
             }`}
         >
-          <CheckCircle2 size={16} />
-          <span>Selesaikan Pesanan &amp; Cetak</span>
+          <ShoppingCart size={16} />
+          <span>Buat Pesanan &amp; Kirim</span>
         </button>
       </div>
     </div>
@@ -618,114 +532,6 @@ export default function POS({ products, onCheckout }: POSProps) {
         </div>
       )}
 
-      {/* 4. Elegant QRIS modal overlay */}
-      {showQRISModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full text-center space-y-4 animate-scale-in">
-            <div className="flex justify-between items-center pb-2 border-b border-stone-100">
-              <span className="text-xs font-bold text-stone-400 uppercase tracking-widest">QRIS Dinamis</span>
-              <button 
-                onClick={() => {
-                  setShowQRISModal(false);
-                  setPaymentMethod('CASH'); // Fallback cash
-                }}
-                className="text-stone-400 text-xs font-semibold hover:text-stone-800 bg-stone-150 px-2 py-0.5 rounded-lg"
-              >
-                Batal
-              </button>
-            </div>
-
-            <div className="space-y-1">
-              <h3 className="font-serif font-bold text-base text-stone-800">PUDANS COFFEE</h3>
-              <p className="text-[10px] text-stone-400 uppercase font-mono tracking-wider">NMID: ID102030405060</p>
-            </div>
-
-            {/* Beautiful Custom SVGMockup QR code referencing QRIS payment */}
-            <div className="bg-[#FAF7F2] p-4 rounded-2xl border border-stone-150 inline-block w-max mx-auto shadow-inner">
-              <svg width="200" height="200" viewBox="0 0 200 200" className="mx-auto block">
-                {/* Outer frame */}
-                <rect width="200" height="200" fill="#FFFFFF" rx="10" />
-                
-                {/* QRIS logo symbol in center */}
-                <rect x="75" y="75" width="50" height="50" fill="#1C355E" rx="8" />
-                <text x="100" y="98" fontSize="10" fill="#FFFFFF" fontFamily="sans-serif" fontWeight="black" textAnchor="middle">QRIS</text>
-                <text x="100" y="112" fontSize="6" fill="#F4B41A" fontFamily="sans-serif" fontWeight="bold" textAnchor="middle">PUDANS</text>
-
-                {/* Simulated Finder patterns in corners */}
-                <rect x="15" y="15" width="40" height="40" fill="#1C355E" rx="4" />
-                <rect x="23" y="23" width="24" height="24" fill="#FFFFFF" rx="2" />
-                <rect x="29" y="29" width="12" height="12" fill="#1C355E" rx="1" />
-
-                <rect x="145" y="15" width="40" height="40" fill="#1C355E" rx="4" />
-                <rect x="153" y="153" width="24" height="24" fill="#FFFFFF" rx="2" stroke="" />
-                <rect x="153" y="23" width="24" height="24" fill="#FFFFFF" rx="2" />
-                <rect x="159" y="29" width="12" height="12" fill="#1C355E" rx="1" />
-
-                <rect x="15" y="145" width="40" height="40" fill="#1C355E" rx="4" />
-                <rect x="23" y="153" width="24" height="24" fill="#FFFFFF" rx="2" />
-                <rect x="29" y="159" width="12" height="12" fill="#1C355E" rx="1" />
-
-                {/* Randomly dotted areas representing matrix code blocks */}
-                <g fill="#2C2E35" opacity="0.85">
-                  <rect x="65" y="15" width="10" height="15" />
-                  <rect x="80" y="25" width="15" height="10" />
-                  <rect x="105" y="15" width="20" height="15" />
-                  <rect x="130" y="30" width="10" height="25" />
-                  
-                  <rect x="15" y="65" width="15" height="10" />
-                  <rect x="25" y="80" width="10" height="15" stroke="" />
-                  <rect x="40" y="65" width="25" height="15" />
-                  <rect x="45" y="95" width="10" height="30" />
-                  
-                  <rect x="135" y="65" width="15" height="20" />
-                  <rect x="155" y="80" width="30" height="10" />
-                  <rect x="145" y="105" width="15" height="15" />
-                  <rect x="170" y="115" width="15" height="20" />
-
-                  <rect x="65" y="145" width="15" height="35" />
-                  <rect x="90" y="155" width="30" height="10" />
-                  <rect x="105" y="170" width="15" height="15" />
-                  <rect x="130" y="150" width="10" height="35" />
-
-                  {/* Dynamic center bits */}
-                  <rect x="65" y="65" width="5" height="5" />
-                  <rect x="130" y="65" width="5" height="5" />
-                  <rect x="65" y="130" width="5" height="5" />
-                  <rect x="130" y="130" width="5" height="5" />
-                </g>
-              </svg>
-            </div>
-
-            <div className="space-y-1">
-              <span className="text-[10px] text-stone-400 tracking-wider block font-bold uppercase">Total Pembayaran</span>
-              <p className="text-xl font-bold font-mono text-[#8B5A2B]">{formatIDR(total)}</p>
-            </div>
-
-            <p className="text-[11px] text-stone-500 max-w-xs mx-auto text-center leading-relaxed">
-              Tunjukkan QR di atas ke pelanggan. Sistem akan memverifikasi pembayaran secara otomatis setelah pemindaian selesai.
-            </p>
-
-            <div className="pt-3 border-t border-stone-100 flex gap-2">
-              <button
-                onClick={() => {
-                  setShowQRISModal(false);
-                  setPaymentMethod('CASH');
-                }}
-                className="flex-1 py-2 rounded-xl text-xs font-semibold text-stone-500 hover:bg-stone-50 border border-stone-200 transition"
-              >
-                Ganti Tunai
-              </button>
-              <button
-                id="qris-verify-success"
-                onClick={handleQRISSucceed}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 rounded-xl transition flex items-center justify-center gap-1.5 shadow-md"
-              >
-                Simulasi Berhasil
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

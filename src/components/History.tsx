@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Transaction } from '../types';
-import { Search, Printer, Calendar, DollarSign, ArrowRight, CornerDownRight, Receipt, Eye, Trash2, RotateCcw } from 'lucide-react';
+import { Search, Printer, Calendar, DollarSign, ArrowRight, ArrowLeft, CornerDownRight, Receipt, Eye, Trash2, RotateCcw } from 'lucide-react';
 
 interface HistoryProps {
   transactions: Transaction[];
@@ -44,11 +44,11 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
 
   // Filter application calculation logic
   const filteredTransactions = useMemo(() => {
-    const today = new Date('2026-06-17T10:41:00-07:00');
+    const today = new Date();
     
     return transactions.filter(t => {
       // 0. Check payment status
-      const isPaid = t.paymentStatus === 'Sudah Bayar' || !t.paymentStatus;
+      const isPaid = t.paymentStatus !== 'Belum Bayar' && t.paymentStatus !== 'Belum Dibayar';
       if (!isPaid) return false;
 
       // 1. Search Query
@@ -97,7 +97,7 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
     <div className="flex flex-col xl:flex-row gap-6 h-[calc(100vh-140px)] min-h-[500px]">
       
       {/* List section (Left / Main Panel) */}
-      <div className="flex-1 flex flex-col space-y-4 h-full overflow-hidden">
+      <div className={`flex-1 flex flex-col space-y-4 h-full overflow-hidden ${selectedTxId ? 'hidden xl:flex' : 'flex'}`}>
         
         {/* Filter Toolbar components */}
         <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm space-y-4">
@@ -238,15 +238,24 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
       </div>
 
       {/* Detail panel (Right Sidebar) */}
-      <div className="w-full xl:w-96 bg-white border border-black/5 rounded-3xl shadow-xl flex flex-col h-full overflow-hidden">
+      <div className={`w-full xl:w-96 bg-white border border-black/5 rounded-3xl shadow-xl flex flex-col h-full overflow-hidden ${selectedTxId ? 'flex' : 'hidden xl:flex'}`}>
         {selectedTxObj ? (
           <div className="flex flex-col h-full overflow-hidden">
             
             {/* Header detail */}
             <div className="p-4 bg-stone-50 border-b border-stone-150 flex justify-between items-center flex-shrink-0">
-              <div className="space-y-0.5">
-                <span className="text-[10px] text-stone-400 uppercase tracking-widest block font-bold">Detail Pesanan</span>
-                <h4 className="font-mono font-bold text-[#3C2A21]">{selectedTxObj.id}</h4>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedTxId(null)}
+                  className="xl:hidden p-1.5 hover:bg-stone-150 text-stone-600 rounded-lg transition cursor-pointer"
+                  title="Kembali ke Daftar"
+                >
+                  <ArrowLeft size={16} />
+                </button>
+                <div className="space-y-0.5">
+                  <span className="text-[10px] text-stone-400 uppercase tracking-widest block font-bold">Detail Pesanan</span>
+                  <h4 className="font-mono font-bold text-[#3C2A21]">{selectedTxObj.id}</h4>
+                </div>
               </div>
               <button
                 onClick={() => onSelectTransaction(selectedTxObj)}

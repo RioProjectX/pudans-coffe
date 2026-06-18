@@ -81,17 +81,15 @@ export default function App() {
   }, []);
 
   const handleClearAllTransactions = async () => {
-    if (window.confirm('Apakah Anda yakin ingin menghapus seluruh riwayat transaksi? Data di database cloud akan dihapus secara permanen.')) {
-      try {
-        const querySnapshot = await getDocs(collection(db, 'transactions'));
-        const batch = writeBatch(db);
-        querySnapshot.forEach((document) => {
-          batch.delete(doc(db, 'transactions', document.id));
-        });
-        await batch.commit();
-      } catch (error) {
-        console.error('Error deleting transactions from Firestore:', error);
-      }
+    try {
+      const querySnapshot = await getDocs(collection(db, 'transactions'));
+      const batch = writeBatch(db);
+      querySnapshot.forEach((document) => {
+        batch.delete(doc(db, 'transactions', document.id));
+      });
+      await batch.commit();
+    } catch (error) {
+      console.error('Error deleting transactions from Firestore:', error);
     }
   };
 
@@ -151,18 +149,30 @@ export default function App() {
 
     try {
       await setDoc(doc(db, 'transactions', invoiceId), freshTx);
-      // Auto-open thermal receipt modal instantly!
-      setActiveReceipt(freshTx);
+      // Removed instant setActiveReceipt to adhere to new order creation flow
     } catch (error) {
       console.error('Error recording checkout transaction to Firestore:', error);
     }
   };
 
-  const handleConfirmPayment = async (txId: string) => {
+  const handleConfirmPayment = async (txId: string, paymentDetails: any) => {
     try {
-      await setDoc(doc(db, 'transactions', txId), { paymentStatus: 'Sudah Bayar' }, { merge: true });
+      const baseTx = transactions.find(t => t.id === txId);
+      if (!baseTx) throw new Error("Transaction not found");
+
+      const lunasTx: Transaction = {
+        ...baseTx,
+        ...paymentDetails,
+        paymentStatus: 'Lunas',
+        status_pembayaran: 'Lunas',
+      };
+
+      await setDoc(doc(db, 'transactions', txId), lunasTx);
+      setActiveReceipt(lunasTx);
+      return lunasTx;
     } catch (error) {
       console.error('Error confirming payment in Firestore:', error);
+      throw error;
     }
   };
 
@@ -292,7 +302,7 @@ export default function App() {
 
       {/* Minimal responsive Footer credentials */}
       <footer className="bg-[#3C2A21] py-4 border-t border-black/15 text-center text-[10px] text-[#F5F2ED]/60 font-mono flex-shrink-0">
-        <p>© 2026 Pudans Coffee Cashier System. Built beautifully for fast &amp; friendly operation harian.</p>
+        <p>© 2026 Pudans Coffee Cashier System. Build by RioProjectX</p>
       </footer>
 
     </div>

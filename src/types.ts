@@ -36,7 +36,12 @@ export interface Transaction {
   changeAmount: number;
   customerName?: string;
   notes?: string;
-  paymentStatus?: 'Belum Bayar' | 'Sudah Bayar';
+  paymentStatus?: 'Belum Bayar' | 'Sudah Bayar' | 'Belum Dibayar' | 'Lunas';
+  status_pembayaran?: string;
+  metode_pembayaran?: string;
+  nominal_pembayaran?: number;
+  nominal_kembalian?: number;
+  waktu_pembayaran?: string;
 }
 
 export interface DayReport {
