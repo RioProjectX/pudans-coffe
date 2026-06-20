@@ -186,9 +186,9 @@ export default function App() {
     }
   };
 
-  const handleConfirmPayment = async (txId: string, paymentDetails: any) => {
+  const handleConfirmPayment = async (txId: string, paymentDetails: any, fallbackTx?: Transaction) => {
     try {
-      const baseTx = transactions.find(t => t.id === txId);
+      const baseTx = transactions.find(t => t.id === txId) || fallbackTx;
       if (!baseTx) throw new Error("Transaction not found");
 
       const lunasTx: Transaction = {

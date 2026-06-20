@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Transaction, PaymentMethod, Product, Category } from '../types';
 import { Clock, Search, CheckCircle, Check, X, AlertTriangle, Printer, Smartphone, DollarSign, ArrowRight, Plus, Minus, AlertCircle, Users } from 'lucide-react';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
@@ -17,7 +17,7 @@ interface PendingOrdersProps {
     nominal_pembayaran: number;
     nominal_kembalian: number;
     waktu_pembayaran: string;
-  }) => Promise<any>;
+  }, fallbackTx?: Transaction) => Promise<any>;
   onUpdateTransactionItems?: (
     txId: string,
     newItems: { productId: string; name: string; price: number; quantity: number; category: Category }[],
@@ -115,6 +115,13 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
       total: totalVal
     };
   }, [combineSelections, transactions]);
+
+  // Auto-sync cash payment amount when selection total changes
+  useEffect(() => {
+    if (showCombineModal) {
+      setCombineCashAmount(String(combinedSelectedItemsAndTotal.total));
+    }
+  }, [combinedSelectedItemsAndTotal.total, showCombineModal]);
 
   // Combined change computation
   const combineChangeValue = useMemo(() => {
@@ -241,8 +248,8 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
         waktu_pembayaran: new Date().toISOString()
       };
 
-      // Confirm payment triggers App.tsx active receipt popup
-      await onConfirmPayment(combinedInvoiceId, paymentDetails);
+      // Confirm payment triggers App.tsx active receipt popup with the combined fallback transaction reference
+      await onConfirmPayment(combinedInvoiceId, paymentDetails, combinedBaseTx);
 
       // Clean up states
       setCombineSelections({});
@@ -405,7 +412,7 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
               className="flex items-center justify-center gap-2 bg-[#D4A373] hover:bg-[#3C2A21] text-white px-4 py-2.5 rounded-xl text-xs font-bold transition duration-200 shadow-sm hover:shadow active:scale-98 cursor-pointer whitespace-nowrap"
             >
               <Users size={14} className="text-stone-100" />
-              <span>💳 Bayar Sekaligus (Group Pay)</span>
+              <span>💳 Bayarin kawan</span>
             </button>
           )}
 
@@ -1341,16 +1348,12 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
                     type="button"
                     disabled={
                       combinedSelectedItemsAndTotal.items.length === 0 ||
-                      (combinePaymentMethod === 'CASH' && (parseFloat(combineCashAmount) || 0) < combinedSelectedItemsAndTotal.total) ||
-                      (combinePaymentMethod === 'QRIS' && combineQrisStatus !== 'SUCCESS') ||
                       isSubmitting
                     }
-                    onClick={() => setCombineDoubleConfirm(true)}
+                    onClick={handleProcessCombinePayment}
                     className={`w-full py-3.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer
                       ${
                         combinedSelectedItemsAndTotal.items.length === 0 ||
-                        (combinePaymentMethod === 'CASH' && (parseFloat(combineCashAmount) || 0) < combinedSelectedItemsAndTotal.total) ||
-                        (combinePaymentMethod === 'QRIS' && combineQrisStatus !== 'SUCCESS') ||
                         isSubmitting
                           ? 'bg-stone-200 text-stone-400 cursor-not-allowed shadow-none'
                           : 'bg-[#3C2A21] hover:bg-[#201510] text-white shadow-[#3C2A21]/15 active:scale-98'

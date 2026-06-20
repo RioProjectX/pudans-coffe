@@ -341,7 +341,7 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
         </div>
         <div className="relative z-10 max-w-xl">
           <span className="bg-[#D4A373]/30 text-[#F5F2ED] px-4 py-1.5 rounded-full text-xs font-semibold tracking-wider uppercase inline-flex items-center gap-1.5 mb-4 border border-[#D4A373]/20">
-            <Sparkles size={12} className="text-[#D4A373]" /> Ringkasan Bisnis Real-Time
+            <Sparkles size={12} className="text-[#D4A373]" /> Buatan Rio ganteng untuk pudans
           </span>
           <h1 className="text-3xl sm:text-4xl font-serif font-bold tracking-tight text-[#F9F6F0]">
             Pudan's Coffee
@@ -361,10 +361,10 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
               <button
                 id="dash-btn-reset"
                 onClick={() => setShowResetConfirm(true)}
-                className="bg-stone-800/40 hover:bg-stone-800/60 text-[#F5F2ED] font-semibold text-sm px-5 py-2.5 rounded-xl transition duration-200 flex items-center gap-2 border border-white/10 cursor-pointer"
+                className="bg-stone-850/50 hover:bg-stone-800 text-[#F5F2ED] font-semibold text-sm px-5 py-2.5 rounded-xl transition duration-200 flex items-center gap-2 border border-white/10 cursor-pointer"
                 title="Atur ulang statistik transaksi ke 0"
               >
-                <RotateCcw size={15} /> Mulai Baru (Reset)
+                <RotateCcw size={15} /> RESET
               </button>
             )}
           </div>

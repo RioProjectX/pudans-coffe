@@ -141,8 +141,8 @@ export default function POS({ products, onCheckout }: POSProps) {
   };
 
   const isCheckoutDisabled = useMemo(() => {
-    return cart.length === 0;
-  }, [cart]);
+    return cart.length === 0 || !customerName.trim();
+  }, [cart, customerName]);
 
   // Process checkout transaction
   const handleProcessCheckout = () => {
@@ -240,17 +240,26 @@ export default function POS({ products, onCheckout }: POSProps) {
           )}
         </div>
         
-        <div className="grid grid-cols-1 gap-2">
+        <div className="grid grid-cols-1 gap-1">
           <div className="relative">
-            <User className="absolute left-3 top-2.5 text-stone-400" size={13} />
+            <User className={`absolute left-3 top-2.5 transition-colors ${cart.length > 0 && !customerName.trim() ? 'text-amber-500 font-bold' : 'text-stone-400'}`} size={13} />
             <input
               type="text"
-              placeholder="Nama Pelanggan (opsional)"
+              placeholder="Nama Pelanggan (Wajib)"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 border border-stone-150 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#D4A373] text-xs bg-white"
+              className={`w-full pl-8 pr-3 py-1.5 border rounded-xl focus:outline-none focus:ring-1 text-xs bg-white transition-all
+                ${cart.length > 0 && !customerName.trim()
+                  ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-500 bg-amber-50/10 placeholder-amber-400/80'
+                  : 'border-stone-150 focus:border-[#D4A373] focus:ring-[#D4A373]'
+                }`}
             />
           </div>
+          {cart.length > 0 && !customerName.trim() && (
+            <div className="text-[10px] text-amber-600 font-semibold flex items-center gap-1.5 mt-0.5 animate-pulse bg-amber-50 px-2 py-1 rounded-lg border border-amber-100/50">
+              ⚠️ Nama pelanggan wajib diisi sebelum memesan!
+            </div>
+          )}
         </div>
       </div>
 
