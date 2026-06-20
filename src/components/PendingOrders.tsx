@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
-import { Transaction, PaymentMethod } from '../types';
-import { Clock, Search, CheckCircle, Check, X, AlertTriangle, Printer, Smartphone, DollarSign, ArrowRight } from 'lucide-react';
+import { Transaction, PaymentMethod, Product, Category } from '../types';
+import { Clock, Search, CheckCircle, Check, X, AlertTriangle, Printer, Smartphone, DollarSign, ArrowRight, Plus, Minus, AlertCircle } from 'lucide-react';
 
 interface PendingOrdersProps {
   transactions: Transaction[];
+  products: Product[];
   onConfirmPayment: (txId: string, paymentDetails: {
     paymentMethod: PaymentMethod;
     amountPaid: number;
@@ -15,9 +16,14 @@ interface PendingOrdersProps {
     nominal_kembalian: number;
     waktu_pembayaran: string;
   }) => Promise<any>;
+  onUpdateTransactionItems?: (
+    txId: string,
+    newItems: { productId: string; name: string; price: number; quantity: number; category: Category }[],
+    newTotal: number
+  ) => Promise<any>;
 }
 
-export default function PendingOrders({ transactions, onConfirmPayment }: PendingOrdersProps) {
+export default function PendingOrders({ transactions, products, onConfirmPayment, onUpdateTransactionItems }: PendingOrdersProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [txToConfirm, setTxToConfirm] = useState<Transaction | null>(null);
   
@@ -26,6 +32,15 @@ export default function PendingOrders({ transactions, onConfirmPayment }: Pendin
   const [cashAmount, setCashAmount] = useState<string>('');
   const [qrisStatus, setQrisStatus] = useState<'WAITING' | 'SUCCESS'>('WAITING');
   const [showDoubleConfirm, setShowDoubleConfirm] = useState(false);
+  
+  // Add items modal states
+  const [txForAddItems, setTxForAddItems] = useState<Transaction | null>(null);
+  const [addItemsGrid, setAddItemsGrid] = useState<{ [productId: string]: number }>({});
+  const [addItemsSearch, setAddItemsSearch] = useState('');
+  const [addItemsCategory, setAddItemsCategory] = useState<Category | 'ALL'>('ALL');
+  const [showAddConfirmWithPassword, setShowAddConfirmWithPassword] = useState(false);
+  const [addItemsPassword, setAddItemsPassword] = useState('');
+  const [addItemsPasswordError, setAddItemsPasswordError] = useState('');
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
@@ -50,6 +65,23 @@ export default function PendingOrders({ transactions, onConfirmPayment }: Pendin
       t.items.some(item => item.name.toLowerCase().includes(query))
     );
   }, [pendingTransactions, searchQuery]);
+
+  // Handle open add items modal
+  const handleOpenAddItems = (tx: Transaction) => {
+    setTxForAddItems(tx);
+    setAddItemsSearch('');
+    setAddItemsCategory('ALL');
+    setAddItemsPassword('');
+    setAddItemsPasswordError('');
+    setShowAddConfirmWithPassword(false);
+    
+    // Initialize quantities with existing transaction items
+    const initialQtys: { [productId: string]: number } = {};
+    tx.items.forEach(item => {
+      initialQtys[item.productId] = item.quantity;
+    });
+    setAddItemsGrid(initialQtys);
+  };
 
   // Handle open payment modal
   const handleOpenPayment = (tx: Transaction) => {
@@ -208,7 +240,20 @@ export default function PendingOrders({ transactions, onConfirmPayment }: Pendin
                 <div className="flex justify-between items-start gap-2">
                   <div>
                     <span className="text-[10px] text-stone-400 font-mono tracking-widest uppercase block mb-0.5">ID Pesanan</span>
-                    <h4 className="font-mono font-bold text-[#3C2A21]">{tx.id}</h4>
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="font-mono font-bold text-[#3C2A21]">{tx.id}</h4>
+                      {onUpdateTransactionItems && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenAddItems(tx)}
+                          className="flex items-center gap-1 px-1.5 py-0.5 bg-[#FAF7F2] hover:bg-[#3C2A21] text-[#3C2A21] hover:text-white border border-stone-200 hover:border-[#3C2A21] rounded-md text-[10px] font-black transition cursor-pointer"
+                          title="Tambah / Ubah Menu"
+                        >
+                          <Plus size={10} className="font-bold text-xs" />
+                          <span>Menu</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <span className="bg-rose-50 text-rose-600 border border-rose-100 text-[10px] px-2.5 py-1 rounded-full font-bold font-sans uppercase tracking-wide select-none">
                     Belum Bayar
@@ -511,6 +556,301 @@ export default function PendingOrders({ transactions, onConfirmPayment }: Pendin
                       className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer disabled:opacity-50"
                     >
                       {isSubmitting ? 'Finalisasi...' : 'Ya, Selesaikan'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+
+      {/* ADD / EDIT TRANSACTION ITEMS MODAL */}
+      {txForAddItems && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-black/5 animate-scale-in relative flex flex-col max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="px-6 py-4 bg-[#F5F2ED] border-b border-stone-200 flex justify-between items-center flex-shrink-0">
+              <div>
+                <h3 className="font-serif text-sm font-bold text-stone-800">Edit / Tambah Menu Pesanan</h3>
+                <span className="text-[10px] font-mono text-[#D4A373] font-bold">ID Pesanan: {txForAddItems.id} • {txForAddItems.customerName || 'Walk-In'}</span>
+              </div>
+              <button 
+                onClick={() => setTxForAddItems(null)}
+                className="text-stone-450 hover:text-stone-700 bg-white/60 hover:bg-white p-1.5 rounded-full transition cursor-pointer"
+                aria-label="Tutup"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Quick search and filter category */}
+            <div className="p-4 bg-stone-50 border-b border-stone-150 flex flex-col sm:flex-row gap-3 items-center justify-between flex-shrink-0">
+              {/* Category tabs */}
+              <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
+                {([
+                  { label: 'Semuan', value: 'ALL' },
+                  { label: '☕ Kopi', value: 'KOPI' },
+                  { label: '🍹 Non-Kopi', value: 'NON_KOPI' },
+                  { label: '🍳 Makanan', value: 'MAKANAN' },
+                  { label: '🍰 Cemilan', value: 'CEMILAN' },
+                ] as const).map((cat) => (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    onClick={() => setAddItemsCategory(cat.value)}
+                    className={`text-[10px] px-3 py-1.5 rounded-lg font-semibold transition border whitespace-nowrap cursor-pointer
+                      ${addItemsCategory === cat.value
+                        ? 'bg-[#3C2A21] border-[#3C2A21] text-white font-bold'
+                        : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
+                      }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search product input */}
+              <div className="relative w-full sm:w-56 flex-shrink-0">
+                <Search className="absolute left-2.5 top-2.5 text-stone-400" size={13} />
+                <input
+                  type="text"
+                  placeholder="Cari menu..."
+                  value={addItemsSearch}
+                  onChange={(e) => setAddItemsSearch(e.target.value)}
+                  className="w-full pl-8 pr-2.5 py-1.5 border border-stone-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#D4A373] text-[11px] bg-white"
+                />
+              </div>
+            </div>
+
+            {/* Products interactive list */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {products
+                  .filter(p => {
+                    const matchCategory = addItemsCategory === 'ALL' || p.category === addItemsCategory;
+                    const matchSearch = p.name.toLowerCase().includes(addItemsSearch.toLowerCase()) ||
+                                        p.description.toLowerCase().includes(addItemsSearch.toLowerCase());
+                    return matchCategory && matchSearch;
+                  })
+                  .map((p) => {
+                    const currentQty = addItemsGrid[p.id] || 0;
+                    return (
+                      <div 
+                        key={p.id} 
+                        className={`p-3.5 border rounded-xl flex items-center justify-between transition
+                          ${currentQty > 0 
+                            ? 'bg-[#FAF7F2] border-[#D4A373] shadow-xs' 
+                            : 'bg-white border-stone-150 hover:border-stone-200'}`}
+                      >
+                        <div className="space-y-1 pr-2 flex-1">
+                          <span className="text-[9px] bg-stone-100 text-stone-500 font-bold px-2 py-0.5 rounded-full font-mono uppercase tracking-wider block w-max">
+                            {p.category}
+                          </span>
+                          <h5 className="font-serif text-xs font-bold text-stone-800 leading-tight">{p.name}</h5>
+                          <p className="text-[10px] text-stone-450 font-mono font-bold">{formatIDR(p.price)}</p>
+                          {!p.isAvailable && (
+                            <span className="text-[9px] font-bold text-rose-500 block">Habis / Tidak Tersedia</span>
+                          )}
+                        </div>
+
+                        {/* Adjust qty buttons */}
+                        <div className="flex items-center gap-2">
+                          {currentQty > 0 ? (
+                            <div className="flex items-center gap-1.5 bg-[#3C2A21] text-white px-2 py-1.5 rounded-lg border border-[#3C2A21]">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAddItemsGrid(prev => {
+                                    const next = { ...prev };
+                                    const val = next[p.id] || 0;
+                                    if (val <= 1) {
+                                      delete next[p.id];
+                                    } else {
+                                      next[p.id] = val - 1;
+                                    }
+                                    return next;
+                                  });
+                                }}
+                                className="hover:bg-white/20 p-0.5 rounded text-white cursor-pointer"
+                              >
+                                <Minus size={11} className="font-bold" />
+                              </button>
+                              <span className="font-mono font-bold text-xs min-w-4 text-center">{currentQty}</span>
+                              <button
+                                type="button"
+                                disabled={!p.isAvailable}
+                                onClick={() => {
+                                  setAddItemsGrid(prev => ({
+                                    ...prev,
+                                    [p.id]: (prev[p.id] || 0) + 1
+                                  }));
+                                }}
+                                className="hover:bg-white/20 p-0.5 rounded text-white cursor-pointer disabled:opacity-40"
+                              >
+                                <Plus size={11} className="font-bold" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={!p.isAvailable}
+                              onClick={() => {
+                                setAddItemsGrid(prev => ({
+                                  ...prev,
+                                  [p.id]: 1
+                                }));
+                              }}
+                              className="px-2.5 py-1.5 bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-400 text-[#3C2A21] rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
+                            >
+                              <Plus size={10} className="font-bold" />
+                              <span>Tambah</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {/* Bottom summary and Action logic */}
+            <div className="p-6 border-t border-stone-150 bg-stone-50 flex-shrink-0 flex flex-col sm:flex-row justify-between items-center gap-4 animate-in fade-in">
+              {/* Count and total price */}
+              <div className="text-center sm:text-left self-start sm:self-auto font-mono">
+                <span className="text-[10px] text-stone-400 block leading-tight">TOTAL UPDATE</span>
+                <span className="text-base font-black text-[#3C2A21]">
+                  {formatIDR(
+                    Object.entries(addItemsGrid).reduce((acc, [pId, qty]) => {
+                      const prod = products.find(p => p.id === pId);
+                      return acc + (prod ? prod.price * (qty as number) : 0);
+                    }, 0)
+                  )}
+                </span>
+                <span className="text-[10px] text-stone-450 block mt-0.5">
+                  Item terpilih: {Object.values(addItemsGrid).reduce((acc: number, qty) => acc + (qty as number), 0)} item
+                </span>
+              </div>
+
+              <div className="flex gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setTxForAddItems(null)}
+                  className="px-4 py-2.5 bg-[#FAF7F2] hover:bg-stone-100 text-stone-600 rounded-xl text-xs font-semibold border border-stone-200 cursor-pointer transition flex-1 sm:flex-none text-center"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={Object.keys(addItemsGrid).length === 0}
+                  onClick={() => {
+                    setAddItemsPassword('');
+                    setAddItemsPasswordError('');
+                    setShowAddConfirmWithPassword(true);
+                  }}
+                  className={`px-6 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 flex-1 sm:flex-none text-center cursor-pointer shadow-sm
+                    ${Object.keys(addItemsGrid).length === 0
+                      ? 'bg-stone-200 text-stone-400 cursor-not-allowed shadow-none'
+                      : 'bg-[#3C2A21] hover:bg-[#1C110C] text-white shadow-[#3C2A21]/15'}`}
+                >
+                  <Check size={13} className="font-bold" />
+                  <span>Update Pesanan</span>
+                </button>
+              </div>
+            </div>
+
+            {/* PASSWORD CONFIRMATION MODAL WITHIN THE ADD DIALOG */}
+            {showAddConfirmWithPassword && (
+              <div className="absolute inset-0 bg-stone-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in z-55">
+                <div className="bg-white rounded-2xl w-full max-w-xs p-5 text-center space-y-4 animate-scale-in">
+                  <div className="w-11 h-11 bg-rose-50 text-rose-600 border border-rose-100 rounded-full flex items-center justify-center mx-auto">
+                    <CheckCircle size={20} className="text-[#D4A373]" />
+                  </div>
+                  <div>
+                    <h4 className="font-serif text-sm font-bold text-stone-800">Sandi Otorisasi Kasir</h4>
+                    <p className="text-[11px] text-[#8E8D8A] mt-1 leading-relaxed">
+                      Masukkan sandi untuk mengkonfirmasi penambahan menu ke pesanan <strong className="text-stone-700 font-mono">{txForAddItems.id}</strong>.
+                    </p>
+                  </div>
+
+                  <div className="text-left font-sans">
+                    <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest mb-1">
+                      Kode Akses Kasir
+                    </label>
+                    <input
+                      type="password"
+                      value={addItemsPassword}
+                      onChange={(e) => {
+                        setAddItemsPassword(e.target.value);
+                        setAddItemsPasswordError('');
+                      }}
+                      placeholder="Masukkan kode..."
+                      className="w-full px-3 py-2 border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-rose-500 bg-stone-50 text-xs font-mono font-bold text-stone-850 tracking-widest placeholder:tracking-normal"
+                    />
+                    {addItemsPasswordError && (
+                      <p className="text-[10px] text-rose-600 mt-1 font-semibold flex items-center gap-1">
+                        <AlertCircle size={10} /> {addItemsPasswordError}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddConfirmWithPassword(false);
+                        setAddItemsPassword('');
+                        setAddItemsPasswordError('');
+                      }}
+                      className="flex-1 py-2 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-xl text-xs font-semibold transition border border-stone-100 cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (addItemsPassword !== 'pudans123') {
+                          setAddItemsPasswordError('Kode otorisasi salah, silakan isi kembali.');
+                          return;
+                        }
+
+                        // Map selected items to the exact items array schema
+                        const newItemsList = Object.entries(addItemsGrid).map(([pId, qty]) => {
+                          const prod = products.find(p => p.id === pId);
+                          return {
+                            productId: pId,
+                            name: prod ? prod.name : 'Unknown Product',
+                            price: prod ? prod.price : 0,
+                            quantity: qty as number,
+                            category: prod ? prod.category : 'KOPI' as Category
+                          };
+                        }).filter(item => item.quantity > 0);
+
+                        const totalNewValue = newItemsList.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+
+                        if (onUpdateTransactionItems) {
+                          try {
+                            await onUpdateTransactionItems(txForAddItems.id, newItemsList, totalNewValue);
+                            
+                            // Visual success toast feedback
+                            setSuccessToast(`Pesanan ${txForAddItems.id} berhasil diperbarui.`);
+                            setTimeout(() => setSuccessToast(null), 3000);
+                          } catch (err) {
+                            console.error('Failed to update trx:', err);
+                          }
+                        }
+
+                        // Close modals
+                        setShowAddConfirmWithPassword(false);
+                        setTxForAddItems(null);
+                        setAddItemsGrid({});
+                        setAddItemsPassword('');
+                      }}
+                      className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer"
+                    >
+                      Konfirmasi
                     </button>
                   </div>
                 </div>

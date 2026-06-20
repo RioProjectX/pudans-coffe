@@ -101,6 +101,29 @@ export default function App() {
     }
   };
 
+  const handleUpdateTransactionItems = async (
+    txId: string, 
+    newItems: { productId: string; name: string; price: number; quantity: number; category: Category }[],
+    newTotal: number
+  ) => {
+    try {
+      const baseTx = transactions.find(t => t.id === txId);
+      if (!baseTx) throw new Error("Transaction not found");
+
+      const updatedTx: Transaction = {
+        ...baseTx,
+        items: newItems,
+        subtotal: newTotal,
+        total: newTotal,
+      };
+
+      await setDoc(doc(db, 'transactions', txId), updatedTx);
+    } catch (error) {
+      console.error('Error updating transaction items in Firestore:', error);
+      throw error;
+    }
+  };
+
   // 1. Catalog Handlers
   const handleAddProduct = async (newProd: Omit<Product, 'id'>) => {
     const freshProdId = 'prod-' + Date.now();
@@ -277,7 +300,9 @@ export default function App() {
           {activeTab === 'PENDING' && (
             <PendingOrders 
               transactions={transactions}
+              products={products}
               onConfirmPayment={handleConfirmPayment}
+              onUpdateTransactionItems={handleUpdateTransactionItems}
             />
           )}
 
