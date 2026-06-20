@@ -207,6 +207,26 @@ export default function App() {
     }
   };
 
+  const handleRevertToUnpaid = async (txId: string) => {
+    try {
+      const baseTx = transactions.find(t => t.id === txId);
+      if (!baseTx) throw new Error("Transaction not found");
+
+      const unpaidTx: Transaction = {
+        ...baseTx,
+        paymentStatus: 'Belum Bayar',
+        status_pembayaran: 'Belum Bayar',
+        amountPaid: 0,
+        changeAmount: 0,
+      };
+
+      await setDoc(doc(db, 'transactions', txId), unpaidTx);
+    } catch (error) {
+      console.error('Error reverting transaction to unpaid status in Firestore:', error);
+      throw error;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F5F2ED] text-[#1A1A1A] font-sans flex flex-col">
       
@@ -321,6 +341,7 @@ export default function App() {
               onSelectTransaction={(tx) => setActiveReceipt(tx)}
               onClearAllTransactions={handleClearAllTransactions}
               onDeleteTransaction={handleDeleteTransaction}
+              onRevertToUnpaid={handleRevertToUnpaid}
             />
           )}
         </div>

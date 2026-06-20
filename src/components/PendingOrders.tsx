@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Transaction, PaymentMethod, Product, Category } from '../types';
-import { Clock, Search, CheckCircle, Check, X, AlertTriangle, Printer, Smartphone, DollarSign, ArrowRight, Plus, Minus, AlertCircle, Users } from 'lucide-react';
+import { Clock, Search, CheckCircle, Check, X, AlertTriangle, Printer, Smartphone, DollarSign, ArrowRight, Plus, Minus, AlertCircle, Users, Scissors } from 'lucide-react';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
@@ -51,6 +51,131 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  // Split transaction states
+  const [txToSplit, setTxToSplit] = useState<Transaction | null>(null);
+  const [splitQuantities, setSplitQuantities] = useState<{ [productId: string]: number }>({});
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [splitError, setSplitError] = useState<string | null>(null);
+
+  const handleOpenSplitModal = (tx: Transaction) => {
+    setTxToSplit(tx);
+    const initialSplitQtys: { [productId: string]: number } = {};
+    tx.items.forEach(item => {
+      initialSplitQtys[item.productId] = 0;
+    });
+    setSplitQuantities(initialSplitQtys);
+    
+    let fallbackName = '';
+    if (tx.customerName && tx.customerName.includes('Gabungan (')) {
+      const match = tx.customerName.match(/\(([^)]+)\)/);
+      if (match && match[1]) {
+        const names = match[1].split('+').map(n => n.trim());
+        if (names.length >= 2) {
+          fallbackName = names[1];
+        }
+      }
+    }
+    setNewCustomerName(fallbackName);
+    setSplitError(null);
+  };
+
+  const handleExecuteSplit = async () => {
+    if (!txToSplit) return;
+    setSplitError(null);
+    
+    const splitOffItems = txToSplit.items.map(item => {
+      const splitQty = splitQuantities[item.productId] || 0;
+      return {
+        ...item,
+        quantity: splitQty
+      };
+    }).filter(item => item.quantity > 0);
+    
+    if (splitOffItems.length === 0) {
+      setSplitError('Pilih setidaknya 1 item dengan kuantitas > 0 untuk dipisahkan.');
+      return;
+    }
+    
+    if (!newCustomerName.trim()) {
+      setSplitError('Nama pelanggan baru wajib diisi.');
+      return;
+    }
+    
+    const remainingItems = txToSplit.items.map(item => {
+      const splitQty = splitQuantities[item.productId] || 0;
+      const remainder = item.quantity - splitQty;
+      return {
+        ...item,
+        quantity: remainder
+      };
+    }).filter(item => item.quantity > 0);
+    
+    if (remainingItems.length === 0) {
+      setSplitError('Semua menu terpilih untuk dipisahkan. Harap sisakan setidaknya 1 item di pesanan semula, atau ubah saja nama pelanggannya.');
+      return;
+    }
+    
+    setIsSubmitting(true);
+    try {
+      const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      const uniqueSuffix = String(Math.floor(Math.random() * 900) + 100);
+      const splitInvoiceId = `TX-${todayStr}-SP${uniqueSuffix}`;
+      
+      const splitTotal = splitOffItems.reduce((acc, i) => acc + (i.price * i.quantity), 0);
+      const remainingTotal = remainingItems.reduce((acc, i) => acc + (i.price * i.quantity), 0);
+      
+      const splitTx: Transaction = {
+        id: splitInvoiceId,
+        timestamp: new Date().toISOString(),
+        customerName: newCustomerName.trim(),
+        items: splitOffItems,
+        subtotal: splitTotal,
+        tax: 0,
+        discount: 0,
+        total: splitTotal,
+        paymentStatus: 'Belum Bayar',
+        paymentMethod: 'CASH',
+        amountPaid: 0,
+        changeAmount: 0
+      };
+      
+      await setDoc(doc(db, 'transactions', splitInvoiceId), splitTx);
+      
+      let updatedOrgName = txToSplit.customerName;
+      if (txToSplit.customerName && txToSplit.customerName.includes('Gabungan (')) {
+        const match = txToSplit.customerName.match(/\(([^)]+)\)/);
+        if (match && match[1]) {
+          const names = match[1].split('+').map(n => n.trim());
+          const remainingNames = names.filter(n => n !== newCustomerName.trim() && n.toLowerCase() !== newCustomerName.trim().toLowerCase());
+          if (remainingNames.length === 1) {
+            updatedOrgName = remainingNames[0];
+          } else if (remainingNames.length > 1) {
+            updatedOrgName = `Gabungan (${remainingNames.join(' + ')})`;
+          }
+        }
+      }
+      
+      const updatedOriginalTx: Transaction = {
+        ...txToSplit,
+        customerName: updatedOrgName,
+        items: remainingItems,
+        subtotal: remainingTotal,
+        total: remainingTotal
+      };
+      
+      await setDoc(doc(db, 'transactions', txToSplit.id), updatedOriginalTx);
+      
+      setSuccessToast(`Pesanan berhasil dipisahkan! Transaksi baru ${splitInvoiceId} telah dibuat.`);
+      setTimeout(() => setSuccessToast(null), 4000);
+      setTxToSplit(null);
+    } catch (err) {
+      console.error('Failed to execute splitting:', err);
+      setSplitError('Gagal memisahkan pesanan di server database.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // Helper format currency to IDR
   const formatIDR = (num: number) => {
@@ -489,6 +614,24 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
                     </span>
                   </div>
                 </div>
+
+                {/* Split Transaction Button trigger */}
+                {(tx.customerName?.includes('Gabungan') || tx.items.length > 1 || tx.items.some(i => i.quantity > 1)) && (
+                  <div className="bg-amber-50/25 hover:bg-amber-50/50 border border-amber-100/60 p-2 rounded-xl flex items-center justify-between text-[11px] transition">
+                    <span className="text-amber-800 font-medium flex items-center gap-1">
+                      {tx.customerName?.includes('Gabungan') ? '👥 Pesanan Gabungan' : '📋 Banyak Menu'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSplitModal(tx)}
+                      className="text-[10px] bg-white hover:bg-amber-50 border border-amber-250 text-amber-850 font-bold px-2 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 active:scale-95 shadow-xs"
+                      title="Pisahkan beberapa bagian atau menu dari pesanan ini menjadi pesanan baru"
+                    >
+                      <Scissors size={10} className="text-amber-600" />
+                      <span>Pisahkan Pesanan</span>
+                    </button>
+                  </div>
+                )}
 
                 {/* Items menu ordered */}
                 <div className="space-y-1.5">
@@ -1402,6 +1545,170 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
                 </div>
               </div>
             )}
+
+          </div>
+        </div>
+      )}
+
+      {/* SPLIT TRANSACTION MODAL */}
+      {txToSplit && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto font-sans">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-black/5 animate-scale-in relative flex flex-col max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="px-6 py-4 bg-[#F5F2ED] border-b border-stone-200 flex justify-between items-center flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Scissors size={18} className="text-[#3c2a21]" />
+                <div>
+                  <h3 className="font-serif text-sm font-bold text-stone-800">Pisahkan Menu Pesanan</h3>
+                  <span className="text-[10px] text-stone-400 block font-mono">ID: {txToSplit.id} • {txToSplit.customerName}</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setTxToSplit(null)}
+                className="text-stone-400 hover:text-stone-700 bg-white hover:bg-stone-50 p-1.5 rounded-full transition cursor-pointer"
+                aria-label="Tutup"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {splitError && (
+                <div className="bg-rose-50 border border-rose-100 text-rose-600 p-3 rounded-xl text-xs flex items-center gap-2 font-semibold">
+                  <AlertCircle size={14} />
+                  <span>{splitError}</span>
+                </div>
+              )}
+
+              {/* Step 1: Input Customer name for new Order */}
+              <div className="space-y-2">
+                <label className="text-[10px] text-stone-500 uppercase tracking-wider font-bold block">
+                  Nama Pelanggan Baru (Tujuan Pemisahan)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Masukkan nama pelanggan baru..."
+                  value={newCustomerName}
+                  onChange={(e) => setNewCustomerName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#D4A373] text-xs bg-white text-stone-800 font-semibold"
+                />
+              </div>
+
+              {/* Step 2: Choose quantities to split off */}
+              <div className="space-y-3">
+                <label className="text-[10px] text-stone-500 uppercase tracking-wider font-bold block">
+                  Pilih Menu &amp; Kuantitas Yang Ingin Dipisahkan
+                </label>
+                
+                <div className="divide-y divide-stone-100 bg-stone-50 border border-stone-150 rounded-xl overflow-hidden p-3.5 space-y-2">
+                  {txToSplit.items.map((item) => {
+                    const maxQty = item.quantity;
+                    const splitQty = splitQuantities[item.productId] || 0;
+
+                    return (
+                      <div key={item.productId} className="flex justify-between items-center text-xs py-2 first:pt-0 last:pb-0">
+                        <div className="flex-1 pr-4">
+                          <span className="font-semibold text-stone-800 block">{item.name}</span>
+                          <span className="text-[10px] text-stone-450 font-mono font-bold">
+                            {formatIDR(item.price)} • Tersedia: {item.quantity}
+                          </span>
+                        </div>
+
+                        {/* Quantity controls */}
+                        <div className="flex items-center gap-2 bg-white px-2 py-1 rounded-xl border border-stone-200">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSplitQuantities(prev => ({
+                                ...prev,
+                                [item.productId]: Math.max(0, splitQty - 1)
+                              }));
+                            }}
+                            className={`p-1 rounded-lg transition-all ${splitQty > 0 ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 cursor-pointer' : 'opacity-40 cursor-not-allowed'}`}
+                            disabled={splitQty <= 0}
+                          >
+                            <Minus size={11} className="font-extrabold" />
+                          </button>
+                          
+                          <span className="w-6 text-center font-bold text-stone-900 font-mono text-xs">
+                            {splitQty}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSplitQuantities(prev => ({
+                                ...prev,
+                                [item.productId]: Math.min(maxQty, splitQty + 1)
+                              }));
+                            }}
+                            className={`p-1 rounded-lg transition-all ${splitQty < maxQty ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 cursor-pointer' : 'opacity-40 cursor-not-allowed'}`}
+                            disabled={splitQty >= maxQty}
+                          >
+                            <Plus size={11} className="font-extrabold" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Summary calculations view */}
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="bg-stone-50 border border-stone-200 p-3 rounded-2xl">
+                  <span className="text-[9px] text-stone-400 block uppercase font-bold">Tetap di Antrean Semula</span>
+                  <div className="mt-1 flex flex-col">
+                    <span className="font-medium text-[10px] text-[#3c2a21] truncate max-w-[150px]">
+                      {txToSplit.customerName && txToSplit.customerName.includes('Gabungan (') && txToSplit.customerName.includes(' + ' + newCustomerName)
+                        ? txToSplit.customerName.replace(' + ' + newCustomerName, '')
+                        : txToSplit.customerName}
+                    </span>
+                    <span className="font-mono text-xs font-bold text-stone-700">
+                      {formatIDR(txToSplit.items.reduce((acc, item) => {
+                        const remainQty = item.quantity - (splitQuantities[item.productId] || 0);
+                        return acc + (item.price * remainQty);
+                      }, 0))}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-amber-50/25 border border-amber-155 p-3 rounded-2xl">
+                  <span className="text-[9px] text-amber-700 block uppercase font-bold">Dipindahkan Ke Akun Baru</span>
+                  <div className="mt-1 flex flex-col">
+                    <span className="font-medium text-[10px] text-amber-800 truncate max-w-[150px]">{newCustomerName || 'Walk-In'}</span>
+                    <span className="font-mono text-xs font-bold text-amber-800">
+                      {formatIDR(txToSplit.items.reduce((acc, item) => {
+                        const splitQty = splitQuantities[item.productId] || 0;
+                        return acc + (item.price * splitQty);
+                      }, 0))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer buttons */}
+            <div className="px-6 py-4 bg-[#F5F2ED] border-t border-stone-200 flex gap-3 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setTxToSplit(null)}
+                className="flex-1 py-2.5 bg-white hover:bg-stone-100 text-stone-600 rounded-xl text-xs font-semibold border border-stone-200 cursor-pointer text-center"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleExecuteSplit}
+                className="flex-1 py-2.5 bg-[#3C2A21] hover:bg-stone-900 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <span>{isSubmitting ? 'Memproses...' : 'Ya, Pisahkan'}</span>
+                <Check size={13} className="font-bold text-emerald-400" />
+              </button>
+            </div>
 
           </div>
         </div>

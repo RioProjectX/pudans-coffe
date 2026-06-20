@@ -1,17 +1,18 @@
 import { useState, useMemo } from 'react';
 import { Transaction } from '../types';
-import { Search, Printer, Calendar, DollarSign, ArrowRight, ArrowLeft, CornerDownRight, Receipt, Eye, Trash2, RotateCcw, AlertCircle } from 'lucide-react';
+import { Search, Printer, Calendar, DollarSign, ArrowRight, ArrowLeft, CornerDownRight, Receipt, Eye, Trash2, RotateCcw, AlertCircle, Undo } from 'lucide-react';
 
 interface HistoryProps {
   transactions: Transaction[];
   onSelectTransaction: (transaction: Transaction) => void;
   onClearAllTransactions?: () => void;
   onDeleteTransaction?: (id: string) => void;
+  onRevertToUnpaid?: (id: string) => Promise<void>;
 }
 
 type DateRangeFilter = 'ALL' | 'TODAY' | 'YESTERDAY' | 'WEEK';
 
-export default function History({ transactions, onSelectTransaction, onClearAllTransactions, onDeleteTransaction }: HistoryProps) {
+export default function History({ transactions, onSelectTransaction, onClearAllTransactions, onDeleteTransaction, onRevertToUnpaid }: HistoryProps) {
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'CASH' | 'QRIS'>('ALL');
@@ -29,6 +30,11 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
   const [showSingleDeleteConfirm, setShowSingleDeleteConfirm] = useState(false);
   const [singleDeleteCode, setSingleDeleteCode] = useState('');
   const [singleDeleteError, setSingleDeleteError] = useState('');
+
+  // Revert transaction state
+  const [txToRevert, setTxToRevert] = useState<Transaction | null>(null);
+  const [revertCode, setRevertCode] = useState('');
+  const [revertError, setRevertError] = useState('');
 
   const formatIDR = (num: number) => {
     return 'Rp ' + num.toLocaleString('id-ID');
@@ -218,12 +224,21 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
                     </span>
                   </div>
 
-                  {/* Status Pembayaran badge */}
+                   {/* Status Pembayaran badge */}
                   <div className="w-full md:w-28 mt-1 md:mt-0 text-left md:text-center flex md:block items-center justify-between">
                     <span className="inline md:hidden text-stone-400 font-sans font-normal">Status:</span>
-                    <span className="bg-emerald-50 text-emerald-700 border border-emerald-150 text-[10px] px-2.5 py-0.2 rounded-full font-bold">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTxToRevert(tx);
+                      }}
+                      className="bg-emerald-50 text-emerald-700 border border-emerald-150 text-[10px] px-2.5 py-0.5 rounded-full font-bold transition-all duration-200 cursor-pointer hover:bg-amber-55 hover:text-amber-800 hover:border-amber-300 inline-flex items-center gap-1 active:scale-95"
+                      title="Klik untuk mengubah kembali status pesanan menjadi Belum Bayar"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-550 inline-block animate-pulse"></span>
                       Sudah Bayar
-                    </span>
+                    </button>
                   </div>
 
                   {/* Bill size */}
@@ -500,6 +515,76 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
                 className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
               >
                 Hapus Struk
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Revert to Unpaid Confirmation Modal */}
+      {txToRevert && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-black/5 p-6 flex flex-col items-center text-center animate-scale-in">
+            <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mb-4 border border-amber-100">
+              <Undo size={19} className="font-bold text-amber-600" />
+            </div>
+            <h3 className="font-serif text-base font-bold text-stone-850">Ubah Status ke Belum Bayar?</h3>
+            <p className="text-xs text-[#8E8D8A] mt-2 mb-4 leading-relaxed">
+              Apakah Anda yakin ingin mengubah status pesanan <strong className="font-mono text-stone-700">{txToRevert.id}</strong> ({txToRevert.customerName || 'Walk-In'}) kembali menjadi <strong className="text-amber-600">Belum Bayar</strong>?
+              <span className="block mt-1.5 font-sans text-stone-500 text-[11px]">
+                Data akan dipindahkan kembali ke tab <strong className="text-stone-700">"Pesanan Diterima"</strong> untuk diproses ulang atau dikoreksi.
+              </span>
+            </p>
+
+            <div className="w-full mb-5 text-left font-sans">
+              <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 font-sans">
+                Kode Akses Kasir (Ubah kembali status)
+              </label>
+              <input
+                type="password"
+                value={revertCode}
+                onChange={(e) => {
+                  setRevertCode(e.target.value);
+                  setRevertError('');
+                }}
+                placeholder="Masukkan kode akses..."
+                className="w-full px-3 py-2 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 bg-stone-50 text-xs font-mono font-bold text-stone-800 tracking-widest placeholder:tracking-normal"
+              />
+              {revertError && (
+                <p className="text-[11px] text-rose-600 mt-1.5 font-semibold flex items-center gap-1 font-sans">
+                  <AlertCircle size={12} /> {revertError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-3 w-full">
+              <button
+                onClick={() => {
+                  setTxToRevert(null);
+                  setRevertCode('');
+                  setRevertError('');
+                }}
+                className="flex-1 py-2.5 bg-stone-50 hover:bg-stone-100 text-stone-600 rounded-xl text-xs font-semibold transition border border-stone-250 cursor-pointer animate-none"
+              >
+                Batal
+              </button>
+              <button
+                onClick={async () => {
+                  if (revertCode !== 'pudans123') {
+                    setRevertError('Kode otorisasi salah, silakan isi kembali.');
+                    return;
+                  }
+                  if (onRevertToUnpaid) {
+                    await onRevertToUnpaid(txToRevert.id);
+                  }
+                  setSelectedTxId(null);
+                  setTxToRevert(null);
+                  setRevertCode('');
+                  setRevertError('');
+                }}
+                className="flex-1 py-2.5 bg-amber-550 hover:bg-amber-650 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
+              >
+                Ya, Belum Bayar
               </button>
             </div>
           </div>
