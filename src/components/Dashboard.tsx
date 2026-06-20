@@ -12,6 +12,8 @@ interface DashboardProps {
 export default function Dashboard({ transactions, products, onNavigateToPOS, onClearAllTransactions }: DashboardProps) {
   const [hoveredPoint, setHoveredPoint] = useState<{ day: string; value: number; x: number; y: number } | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetCode, setResetCode] = useState('');
+  const [resetError, setResetError] = useState('');
 
   // Formatting helpers
   const formatIDR = (num: number) => {
@@ -606,22 +608,54 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
               <RotateCcw size={20} className="animate-spin-once" />
             </div>
             <h3 className="font-serif text-base font-bold text-stone-850">Kosongkan Semua Data?</h3>
-            <p className="text-xs text-[#8E8D8A] mt-2 mb-6">
+            <p className="text-xs text-[#8E8D8A] mt-2 mb-4">
               Apakah Anda yakin ingin menghapus seluruh data transaksi ini? Statistik monitor dan seluruh riwayat struk akan diatur ulang kembali ke 0.
             </p>
+
+            <div className="w-full mb-5 text-left">
+              <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 font-sans">
+                Kode Akses Kasir (Mulai Baru)
+              </label>
+              <input
+                type="password"
+                value={resetCode}
+                onChange={(e) => {
+                  setResetCode(e.target.value);
+                  setResetError('');
+                }}
+                placeholder="Masukkan kode akses..."
+                className="w-full px-3 py-2 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 bg-stone-50 text-xs font-mono font-bold text-stone-800 tracking-widest placeholder:tracking-normal"
+              />
+              {resetError && (
+                <p className="text-[11px] text-rose-600 mt-1.5 font-semibold flex items-center gap-1 font-sans">
+                  <AlertCircle size={12} /> {resetError}
+                </p>
+              )}
+            </div>
+
             <div className="flex gap-3 w-full">
               <button
-                onClick={() => setShowResetConfirm(false)}
+                onClick={() => {
+                  setShowResetConfirm(false);
+                  setResetCode('');
+                  setResetError('');
+                }}
                 className="flex-1 py-2.5 bg-stone-50 hover:bg-stone-100 text-stone-600 rounded-xl text-xs font-semibold transition border border-stone-250 cursor-pointer"
               >
                 Batal
               </button>
               <button
                 onClick={() => {
+                  if (resetCode !== 'pudans123') {
+                    setResetError('Kode otorisasi salah, silakan isi kembali.');
+                    return;
+                  }
                   if (onClearAllTransactions) {
                     onClearAllTransactions();
                   }
                   setShowResetConfirm(false);
+                  setResetCode('');
+                  setResetError('');
                 }}
                 className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
               >

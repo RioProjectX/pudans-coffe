@@ -93,6 +93,14 @@ export default function App() {
     }
   };
 
+  const handleDeleteTransaction = async (txId: string) => {
+    try {
+      await deleteDoc(doc(db, 'transactions', txId));
+    } catch (error) {
+      console.error('Error deleting transaction from Firestore:', error);
+    }
+  };
+
   // 1. Catalog Handlers
   const handleAddProduct = async (newProd: Omit<Product, 'id'>) => {
     const freshProdId = 'prod-' + Date.now();
@@ -287,6 +295,7 @@ export default function App() {
               transactions={transactions}
               onSelectTransaction={(tx) => setActiveReceipt(tx)}
               onClearAllTransactions={handleClearAllTransactions}
+              onDeleteTransaction={handleDeleteTransaction}
             />
           )}
         </div>

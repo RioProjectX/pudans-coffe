@@ -1,16 +1,17 @@
 import { useState, useMemo } from 'react';
 import { Transaction } from '../types';
-import { Search, Printer, Calendar, DollarSign, ArrowRight, ArrowLeft, CornerDownRight, Receipt, Eye, Trash2, RotateCcw } from 'lucide-react';
+import { Search, Printer, Calendar, DollarSign, ArrowRight, ArrowLeft, CornerDownRight, Receipt, Eye, Trash2, RotateCcw, AlertCircle } from 'lucide-react';
 
 interface HistoryProps {
   transactions: Transaction[];
   onSelectTransaction: (transaction: Transaction) => void;
   onClearAllTransactions?: () => void;
+  onDeleteTransaction?: (id: string) => void;
 }
 
 type DateRangeFilter = 'ALL' | 'TODAY' | 'YESTERDAY' | 'WEEK';
 
-export default function History({ transactions, onSelectTransaction, onClearAllTransactions }: HistoryProps) {
+export default function History({ transactions, onSelectTransaction, onClearAllTransactions, onDeleteTransaction }: HistoryProps) {
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'CASH' | 'QRIS'>('ALL');
@@ -21,6 +22,13 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
 
   // Clear confirmation local state
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetCode, setResetCode] = useState('');
+  const [resetError, setResetError] = useState('');
+
+  // Single transaction delete local states
+  const [showSingleDeleteConfirm, setShowSingleDeleteConfirm] = useState(false);
+  const [singleDeleteCode, setSingleDeleteCode] = useState('');
+  const [singleDeleteError, setSingleDeleteError] = useState('');
 
   const formatIDR = (num: number) => {
     return 'Rp ' + num.toLocaleString('id-ID');
@@ -341,6 +349,16 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
                 </div>
               </div>
 
+              {/* Delete this receipt button */}
+              {onDeleteTransaction && (
+                <button
+                  onClick={() => setShowSingleDeleteConfirm(true)}
+                  className="w-full mt-2 py-2.5 bg-rose-50 hover:bg-rose-155 border border-rose-150 text-rose-600 hover:text-rose-700 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-2 font-sans"
+                >
+                  <Trash2 size={13} /> Hapus Transaksi Ini
+                </button>
+              )}
+
             </div>
           </div>
         ) : (
@@ -362,27 +380,126 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
               <RotateCcw size={20} className="animate-spin-once-now font-bold" />
             </div>
             <h3 className="font-serif text-base font-bold text-stone-850">Kosongkan Riwayat Struk?</h3>
-            <p className="text-xs text-[#8E8D8A] mt-2 mb-6">
+            <p className="text-xs text-[#8E8D8A] mt-2 mb-4">
               Apakah Anda yakin ingin menghapus seluruh riwayat pesanan? Data di monitor dashboard dan rincian transaksi akan diatur ulang kembali ke 0.
             </p>
+
+            <div className="w-full mb-5 text-left">
+              <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 font-sans">
+                Kode Akses Kasir (Mulai Baru)
+              </label>
+              <input
+                type="password"
+                value={resetCode}
+                onChange={(e) => {
+                  setResetCode(e.target.value);
+                  setResetError('');
+                }}
+                placeholder="Masukkan kode akses..."
+                className="w-full px-3 py-2 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 bg-stone-50 text-xs font-mono font-bold text-stone-800 tracking-widest placeholder:tracking-normal"
+              />
+              {resetError && (
+                <p className="text-[11px] text-rose-600 mt-1.5 font-semibold flex items-center gap-1 font-sans">
+                  <AlertCircle size={12} /> {resetError}
+                </p>
+              )}
+            </div>
+
             <div className="flex gap-3 w-full">
               <button
-                onClick={() => setShowResetConfirm(false)}
+                onClick={() => {
+                  setShowResetConfirm(false);
+                  setResetCode('');
+                  setResetError('');
+                }}
                 className="flex-1 py-2.5 bg-stone-50 hover:bg-stone-100 text-stone-600 rounded-xl text-xs font-semibold transition border border-stone-250 cursor-pointer"
               >
                 Batal
               </button>
               <button
                 onClick={() => {
+                  if (resetCode !== 'pudans123') {
+                    setResetError('Kode otorisasi salah, silakan isi kembali.');
+                    return;
+                  }
                   if (onClearAllTransactions) {
                     onClearAllTransactions();
                   }
                   setSelectedTxId(null);
                   setShowResetConfirm(false);
+                  setResetCode('');
+                  setResetError('');
                 }}
                 className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
               >
                 Hapus Semua
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Confirmation Modal for Deleting Single Record */}
+      {showSingleDeleteConfirm && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-black/5 p-6 flex flex-col items-center text-center animate-scale-in">
+            <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-4 border border-rose-100">
+              <Trash2 size={20} className="font-bold" />
+            </div>
+            <h3 className="font-serif text-base font-bold text-stone-850">Hapus Struk Transaksi Ini?</h3>
+            <p className="text-xs text-[#8E8D8A] mt-2 mb-4">
+              Apakah Anda yakin ingin menghapus struk transaksi <span className="font-mono font-bold text-stone-750">{selectedTxObj?.id}</span>? Tindakan ini permanen dan tidak dapat dibatalkan.
+            </p>
+
+            <div className="w-full mb-5 text-left">
+              <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 font-sans">
+                Kode Akses Kasir (Hapus Struk)
+              </label>
+              <input
+                type="password"
+                value={singleDeleteCode}
+                onChange={(e) => {
+                  setSingleDeleteCode(e.target.value);
+                  setSingleDeleteError('');
+                }}
+                placeholder="Masukkan kode akses..."
+                className="w-full px-3 py-2 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 bg-stone-50 text-xs font-mono font-bold text-stone-800 tracking-widest placeholder:tracking-normal"
+              />
+              {singleDeleteError && (
+                <p className="text-[11px] text-rose-600 mt-1.5 font-semibold flex items-center gap-1 font-sans">
+                  <AlertCircle size={12} /> {singleDeleteError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-3 w-full">
+              <button
+                onClick={() => {
+                  setShowSingleDeleteConfirm(false);
+                  setSingleDeleteCode('');
+                  setSingleDeleteError('');
+                }}
+                className="flex-1 py-2.5 bg-stone-50 hover:bg-stone-100 text-stone-600 rounded-xl text-xs font-semibold transition border border-stone-250 cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  if (singleDeleteCode !== 'pudans123') {
+                    setSingleDeleteError('Kode otorisasi salah, silakan isi kembali.');
+                    return;
+                  }
+                  if (onDeleteTransaction && selectedTxObj) {
+                    onDeleteTransaction(selectedTxObj.id);
+                  }
+                  setSelectedTxId(null);
+                  setShowSingleDeleteConfirm(false);
+                  setSingleDeleteCode('');
+                  setSingleDeleteError('');
+                }}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
+              >
+                Hapus Struk
               </button>
             </div>
           </div>
