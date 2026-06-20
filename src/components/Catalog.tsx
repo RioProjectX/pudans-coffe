@@ -255,7 +255,7 @@ export default function Catalog({ products, onAddProduct, onEditProduct, onDelet
                 <h3 className="font-serif text-base font-bold text-stone-800">
                   {editingProduct ? 'Ubah Detail Menu Kopi' : 'Tambah Menu Baru'}
                 </h3>
-                <p className="text-[11px] text-stone-400">Sesuaikan data produk dalam katalog Pudans Coffee</p>
+                <p className="text-[11px] text-stone-400">Sesuaikan data produk dalam katalog Pudan's Coffee</p>
               </div>
               <button 
                 onClick={() => setShowFormModal(false)}

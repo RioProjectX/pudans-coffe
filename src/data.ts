@@ -21,10 +21,10 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: 'prod-3',
-    name: 'Signature Pudans Latte',
+    name: "Signature Pudan's Latte",
     category: 'KOPI',
     price: 32000,
-    description: 'Es kopi susu khas Pudans dengan racikan pandan segar, krim kelapa lembut, dan gula aren organik.',
+    description: "Es kopi susu khas Pudan's dengan racikan pandan segar, krim kelapa lembut, dan gula aren organik.",
     image: 'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&q=80&w=400',
     isAvailable: true,
   },
@@ -84,7 +84,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: 'prod-10',
-    name: 'Pudans Fried Rice (Nasi Goreng)',
+    name: "Pudan's Fried Rice (Nasi Goreng)",
     category: 'MAKANAN',
     price: 35000,
     description: 'Nasi goreng bumbu tradisional dengan telur mata sapi, sate ayam, acar segar, dan kerupuk udang renyah.',

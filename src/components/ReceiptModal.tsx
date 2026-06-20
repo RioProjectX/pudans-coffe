@@ -50,7 +50,7 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
     
     const win = window.open('', '', 'height=600,width=400');
     if (win) {
-      win.document.write('<html><head><title>Print Struk - Pudans Coffee</title>');
+      win.document.write('<html><head><title>Print Struk - Pudan\'s Coffee</title>');
       win.document.write(style);
       win.document.write('</head><body>');
       win.document.write(printContent);
@@ -100,7 +100,7 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
 
             {/* Coffee Shop info */}
             <div className="text-center space-y-1 my-2">
-              <h2 className="font-serif font-bold text-base tracking-tight text-stone-900 uppercase">Pudans Coffee</h2>
+              <h2 className="font-serif font-bold text-base tracking-tight text-stone-900 uppercase">Pudan's Coffee</h2>
               <p className="text-[10px] text-stone-500 font-sans">Kopi Premium, Cemilan, &amp; Kuliner Harian</p>
               <p className="text-[10px] text-stone-400 font-sans">Jl. Terompet No. 69, Kec. Medan Baru</p>
               <p className="text-[10px] text-stone-400 font-sans">Telp: 0812-3456-7890</p>
@@ -125,7 +125,7 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
               </div>
               <div className="flex justify-between">
                 <span>Kasir:</span>
-                <span>Pudans POS Master</span>
+                <span>Pudan's POS Master</span>
               </div>
             </div>
 
@@ -205,7 +205,7 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
             <div className="text-center space-y-1 mt-3">
               <p className="text-[11px] font-bold text-stone-700">Terima Kasih!</p>
               <p className="text-[9px] text-stone-400 font-sans">Silakan kunjungi kami kembali.</p>
-              <span className="text-[8px] text-stone-300 block font-mono">Pudans POS v1.0.0</span>
+              <span className="text-[8px] text-stone-300 block font-mono">Pudan's POS v1.0.0</span>
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Transaction, Product } from '../types';
-import { TrendingUp, DollarSign, ShoppingBag, Award, Clock, ArrowUpRight, ArrowDownRight, Coffee, Utensils, Sparkles, AlertCircle, Trash2, RotateCcw } from 'lucide-react';
+import { TrendingUp, DollarSign, ShoppingBag, Award, Clock, ArrowUpRight, ArrowDownRight, Coffee, Utensils, Sparkles, AlertCircle, Trash2, RotateCcw, Calendar } from 'lucide-react';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -15,6 +15,11 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
   const [resetCode, setResetCode] = useState('');
   const [resetError, setResetError] = useState('');
 
+  // Daily transaction detail filter state
+  const [showTrxFilterModal, setShowTrxFilterModal] = useState(false);
+  const [filterPeriod, setFilterPeriod] = useState<'TODAY' | 'YESTERDAY' | 'CUSTOM'>('TODAY');
+  const [customFilterDate, setCustomFilterDate] = useState(() => new Date().toISOString().split('T')[0]);
+
   // Formatting helpers
   const formatIDR = (num: number) => {
     return 'Rp ' + num.toLocaleString('id-ID');
@@ -27,6 +32,13 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
     } catch {
       return dateStr;
     }
+  };
+
+  const formatToDayMonthYear = (dateObj: Date) => {
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const year = dateObj.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   // 1. Real-time stats calculations
@@ -88,6 +100,89 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
       isPositive: percentage >= 0,
     };
   }, [stats]);
+
+  // Transaction detail filtering calculation based on active inputs (Today, Yesterday, Custom date)
+  const filteredDayStats = useMemo(() => {
+    const today = new Date();
+    let target = today;
+    if (filterPeriod === 'YESTERDAY') {
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      target = yesterday;
+    } else if (filterPeriod === 'CUSTOM') {
+      try {
+        if (customFilterDate) {
+          const parts = customFilterDate.split('-');
+          if (parts.length === 3) {
+            target = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+          }
+        }
+      } catch (err) {
+        target = today;
+      }
+    }
+
+    let totalOmzet = 0;
+    let countSuccess = 0;
+    let totalQRIS = 0;
+    let countQRIS = 0;
+    let totalCash = 0;
+    let countCash = 0;
+
+    const itemsSoldMap: Record<string, { name: string; category: string; qty: number; value: number }> = {};
+
+    transactions.forEach(t => {
+      if (t.paymentStatus === 'Belum Bayar' || t.paymentStatus === 'Belum Dibayar') return;
+
+      const tDate = new Date(t.timestamp);
+      const isMatched = tDate.getFullYear() === target.getFullYear() &&
+                        tDate.getMonth() === target.getMonth() &&
+                        tDate.getDate() === target.getDate();
+
+      if (isMatched) {
+        totalOmzet += t.total;
+        countSuccess += 1;
+
+        if (t.paymentMethod === 'QRIS') {
+          totalQRIS += t.total;
+          countQRIS += 1;
+        } else {
+          totalCash += t.total;
+          countCash += 1;
+        }
+
+        t.items.forEach(item => {
+          const key = item.productId || 'unknown';
+          if (!itemsSoldMap[key]) {
+            itemsSoldMap[key] = {
+              name: item.name,
+              category: item.category || 'KOPI',
+              qty: 0,
+              value: 0
+            };
+          }
+          itemsSoldMap[key].qty += item.quantity;
+          itemsSoldMap[key].value += item.quantity * item.price;
+        });
+      }
+    });
+
+    const itemsList = Object.entries(itemsSoldMap).map(([id, info]) => ({
+      id,
+      ...info
+    })).sort((a, b) => b.qty - a.qty);
+
+    return {
+      targetDate: target,
+      totalOmzet,
+      countSuccess,
+      totalQRIS,
+      countQRIS,
+      totalCash,
+      countCash,
+      items: itemsList
+    };
+  }, [transactions, filterPeriod, customFilterDate]);
 
   // 3. Analytics Chart: Sales Trend (Last 7 Days)
   const chartData = useMemo(() => {
@@ -249,7 +344,7 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
             <Sparkles size={12} className="text-[#D4A373]" /> Ringkasan Bisnis Real-Time
           </span>
           <h1 className="text-3xl sm:text-4xl font-serif font-bold tracking-tight text-[#F9F6F0]">
-            Pudans Coffee
+            Pudan's Coffee
           </h1>
           <p className="mt-2 text-sm text-stone-300 font-sans leading-relaxed">
             Kelola transaksi kasir, analisis omzet penjualan, dan kelola menu kopi premium Anda dengan praktis, cepat, dan modern.
@@ -326,18 +421,28 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
         </div>
 
         {/* Total transaction */}
-        <div className="bg-white p-5 rounded-2xl border border-black/5 shadow-sm transition hover:shadow-md flex items-start justify-between">
+        <button
+          type="button"
+          onClick={() => {
+            setFilterPeriod('TODAY');
+            setCustomFilterDate(new Date().toISOString().split('T')[0]);
+            setShowTrxFilterModal(true);
+          }}
+          className="bg-white p-5 rounded-2xl border border-black/5 shadow-sm transition hover:shadow-md hover:border-[#D4A373]/30 hover:scale-[1.01] active:scale-[0.99] flex items-start justify-between text-left w-full cursor-pointer focus:outline-none group"
+        >
           <div className="space-y-2">
-            <p className="text-gray-400 text-xs font-medium uppercase tracking-wider">Total Transaksi</p>
+            <p className="text-gray-400 text-xs font-medium uppercase tracking-wider group-hover:text-[#D4A373] transition">Total Transaksi</p>
             <h3 className="text-2xl font-bold font-sans text-stone-800">
-              {stats.transactionCount} <span className="text-sm font-normal text-gray-400">Total</span>
+              {stats.transactionCount} <span className="text-sm font-normal text-gray-400 font-sans">Total</span>
             </h3>
-            <span className="text-[11px] text-gray-500 block">Riwayat terdata di sistem POS</span>
+            <span className="text-[11px] text-[#D4A373] font-semibold block flex items-center gap-1">
+              <span>Klik rincian harian</span> ➔
+            </span>
           </div>
-          <div className="bg-stone-155 text-stone-700 p-3 rounded-xl">
+          <div className="bg-stone-100 text-stone-700 p-3 rounded-xl group-hover:bg-[#3C2A21] group-hover:text-white transition duration-250">
             <ShoppingBag size={20} />
           </div>
-        </div>
+        </button>
       </div>
 
       {/* Main Charts area */}
@@ -501,7 +606,7 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
 
           <div className="bg-[#F5F2ED] p-3 rounded-xl border border-black/5 text-center">
             <span className="text-[11px] text-[#3C2A21] font-semibold flex items-center justify-center gap-1.5">
-              <Award size={14} /> Kopi Espresso tetap menjadi andalan omzet utama Pudans Coffee.
+              <Award size={14} /> Kopi Espresso tetap menjadi andalan omzet utama Pudan's Coffee.
             </span>
           </div>
         </div>
@@ -660,6 +765,157 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
                 className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
               >
                 Kosongkan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DAILY TRANSACTION FILTERS & MONITOR DIALOG */}
+      {showTrxFilterModal && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-black/5 flex flex-col max-h-[85vh] animate-scale-in">
+            {/* Modal Header */}
+            <div className="bg-[#FAF7F2] px-6 py-4 border-b border-stone-200 flex justify-between items-center flex-shrink-0">
+              <div className="flex items-center gap-2 text-[#3C2A21]">
+                <Calendar size={18} />
+                <h3 className="font-serif text-sm font-bold">Rincian Total Transaksi</h3>
+              </div>
+              <button 
+                onClick={() => setShowTrxFilterModal(false)}
+                className="text-stone-400 hover:text-stone-700 bg-white/70 hover:bg-white p-1 rounded-full transition cursor-pointer"
+              >
+                <AlertCircle size={20} className="hidden" />
+                <span className="text-xs font-mono font-bold px-1.5 py-0.5 border border-stone-200 rounded-md">Tutup</span>
+              </button>
+            </div>
+
+            {/* Quick Segment Selectors */}
+            <div className="px-6 py-4 bg-stone-50 border-b border-stone-150 flex-shrink-0 space-y-3.5">
+              <div className="grid grid-cols-3 gap-1.5 bg-stone-100 p-1 rounded-xl">
+                {([
+                  { label: 'Hari Ini', value: 'TODAY' },
+                  { label: 'Kemarin', value: 'YESTERDAY' },
+                  { label: 'Pilih Tanggal', value: 'CUSTOM' }
+                ] as const).map((seg) => (
+                  <button
+                    key={seg.value}
+                    type="button"
+                    onClick={() => setFilterPeriod(seg.value)}
+                    className={`py-1.5 rounded-lg text-[10px] font-bold transition text-center cursor-pointer
+                      ${filterPeriod === seg.value
+                        ? 'bg-[#3C2A21] text-white shadow-xs'
+                        : 'text-stone-500 hover:text-stone-800'}`}
+                  >
+                    {seg.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Date Input Element */}
+              {filterPeriod === 'CUSTOM' && (
+                <div className="space-y-1 animate-slide-in">
+                  <label className="block text-[9px] font-bold text-stone-500 uppercase tracking-widest">
+                    Cari Berdasarkan Tanggal
+                  </label>
+                  <input
+                    type="date"
+                    value={customFilterDate}
+                    onChange={(e) => setCustomFilterDate(e.target.value)}
+                    className="w-full px-3.5 py-2 border border-stone-250 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#D4A373] bg-white text-xs font-mono font-bold text-stone-800"
+                  />
+                </div>
+              )}
+
+              {/* Dynamic day label with strict DD/MM/YYYY format representation */}
+              <div className="flex justify-between items-center bg-amber-50/50 border border-amber-100/60 p-2.5 rounded-lg font-mono text-xs">
+                <span className="text-stone-500 text-[10px] font-semibold">TANGGAL MONITOR:</span>
+                <span className="text-[#3C2A21] font-black tracking-wider text-[11px]">
+                  {formatToDayMonthYear(filteredDayStats.targetDate)}
+                </span>
+              </div>
+            </div>
+
+            {/* Content Details */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              
+              {/* Main Summary Blocks */}
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="bg-[#FAF7F2] p-4 rounded-2xl border border-[#D4A373]/10 text-center space-y-1">
+                  <span className="text-[9px] text-[#D4A373] font-bold uppercase tracking-wider block">Omzet Selesai</span>
+                  <span className="text-sm font-black font-mono text-[#3C2A21] block">
+                    {formatIDR(filteredDayStats.totalOmzet)}
+                  </span>
+                </div>
+
+                <div className="bg-stone-50 p-4 rounded-2xl border border-stone-200/50 text-center space-y-1">
+                  <span className="text-[9px] text-stone-400 font-bold uppercase tracking-wider block">Total Transaksi</span>
+                  <span className="text-sm font-black font-mono text-stone-850 block">
+                    {filteredDayStats.countSuccess} Transaksi
+                  </span>
+                </div>
+              </div>
+
+              {/* Payment Methods Breakdown */}
+              <div className="space-y-2 bg-stone-50/65 p-4 rounded-2xl border border-stone-150">
+                <h4 className="text-[10px] uppercase font-bold text-stone-550 tracking-wider">Metode Pembayaran</h4>
+                <div className="space-y-2 text-xs font-mono font-semibold">
+                  <div className="flex justify-between items-center text-stone-650">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                      <span>Tunai (Cash)</span>
+                    </span>
+                    <span>{filteredDayStats.countCash}x ({formatIDR(filteredDayStats.totalCash)})</span>
+                  </div>
+                  <div className="flex justify-between items-center text-stone-650">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block"></span>
+                      <span>QRIS Digital</span>
+                    </span>
+                    <span>{filteredDayStats.countQRIS}x ({formatIDR(filteredDayStats.totalQRIS)})</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items Sold Breakdown */}
+              <div className="space-y-2">
+                <h4 className="text-[10px] uppercase font-bold text-stone-550 tracking-wider flex justify-between">
+                  <span>Rincian Menu Terjual</span>
+                  <span>Volume</span>
+                </h4>
+                
+                {filteredDayStats.items.length === 0 ? (
+                  <div className="py-8 text-center text-stone-400 text-xs font-medium bg-stone-50 rounded-xl border border-dashed border-stone-200">
+                    Tidak ada produk terjual pada tanggal ini.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-stone-100 max-h-48 overflow-y-auto pr-1">
+                    {filteredDayStats.items.map((item) => (
+                      <div key={item.id} className="py-2 flex justify-between items-center text-[11px]">
+                        <div>
+                          <span className="font-semibold text-stone-850 block">{item.name}</span>
+                          <span className="text-[9px] text-[#D4A373] bg-[#FAF7F2] font-semibold px-2 py-0.5 rounded-md uppercase font-mono">{item.category}</span>
+                        </div>
+                        <div className="text-right font-mono text-stone-700 font-bold">
+                          <span>{item.qty}x</span>
+                          <span className="text-[9px] text-stone-400 block font-normal">{formatIDR(item.value)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Bottom Footer Actions */}
+            <div className="p-4 bg-stone-50 border-t border-stone-150 flex-shrink-0 text-center">
+              <button
+                type="button"
+                onClick={() => setShowTrxFilterModal(false)}
+                className="w-full py-2.5 bg-[#3C2A21] hover:bg-stone-900 text-white font-bold text-xs rounded-xl cursor-pointer transition shadow-sm"
+              >
+                Kembali ke Dashboard
               </button>
             </div>
           </div>

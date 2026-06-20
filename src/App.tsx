@@ -222,7 +222,7 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-serif text-lg font-bold tracking-tight text-[#FBF9F6]">
-                  Pudans Coffee
+                  Pudan's Coffee
                 </h1>
                 <span className="bg-[#D4A373]/30 text-[#F5F2ED] border border-[#D4A373]/20 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono">
                   POS Premium
@@ -336,7 +336,7 @@ export default function App() {
 
       {/* Minimal responsive Footer credentials */}
       <footer className="bg-[#3C2A21] py-4 border-t border-black/15 text-center text-[10px] text-[#F5F2ED]/60 font-mono flex-shrink-0">
-        <p>© 2026 Pudans Coffee Cashier System. Build by RioProjectX</p>
+        <p>© 2026 Pudan's Coffee Cashier System. Build by RioProjectX</p>
       </footer>
 
     </div>
