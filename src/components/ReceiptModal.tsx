@@ -103,7 +103,7 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
               <h2 className="font-serif font-bold text-base tracking-tight text-stone-900 uppercase">Pudan's Coffee</h2>
               <p className="text-[10px] text-stone-500 font-sans">Kopi Premium, Cemilan, &amp; Kuliner Harian</p>
               <p className="text-[10px] text-stone-400 font-sans">Jl. Terompet No. 69, Kec. Medan Baru</p>
-              <p className="text-[10px] text-stone-400 font-sans">ig : @pudans_coffee</p>
+              <p className="text-[10px] text-stone-400 font-sans">Telp: 0812-3456-7890</p>
             </div>
 
             {/* Dotteddivider */}

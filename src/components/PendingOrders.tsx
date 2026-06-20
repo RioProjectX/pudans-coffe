@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
 import { Transaction, PaymentMethod, Product, Category } from '../types';
-import { Clock, Search, CheckCircle, Check, X, AlertTriangle, Printer, Smartphone, DollarSign, ArrowRight, Plus, Minus, AlertCircle } from 'lucide-react';
+import { Clock, Search, CheckCircle, Check, X, AlertTriangle, Printer, Smartphone, DollarSign, ArrowRight, Plus, Minus, AlertCircle, Users } from 'lucide-react';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 interface PendingOrdersProps {
   transactions: Transaction[];
@@ -38,6 +40,14 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
   const [addItemsGrid, setAddItemsGrid] = useState<{ [productId: string]: number }>({});
   const [addItemsSearch, setAddItemsSearch] = useState('');
   const [addItemsCategory, setAddItemsCategory] = useState<Category | 'ALL'>('ALL');
+
+  // Combined pay together / Group Pay states
+  const [showCombineModal, setShowCombineModal] = useState(false);
+  const [combineSelections, setCombineSelections] = useState<{ [txId: string]: { [productId: string]: number } }>({});
+  const [combinePaymentMethod, setCombinePaymentMethod] = useState<PaymentMethod>('CASH');
+  const [combineCashAmount, setCombineCashAmount] = useState<string>('');
+  const [combineQrisStatus, setCombineQrisStatus] = useState<'WAITING' | 'SUCCESS'>('WAITING');
+  const [combineDoubleConfirm, setCombineDoubleConfirm] = useState(false);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
@@ -63,6 +73,56 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
     );
   }, [pendingTransactions, searchQuery]);
 
+  // Computed values of selected items inside combine payment modal
+  const combinedSelectedItemsAndTotal = useMemo(() => {
+    const selectedList: {
+      txId: string;
+      customerName: string;
+      productId: string;
+      name: string;
+      price: number;
+      quantity: number;
+      category: Category;
+    }[] = [];
+
+    let totalVal = 0;
+
+    Object.entries(combineSelections).forEach(([txId, prodQuantities]) => {
+      const originalTx = transactions.find(t => t.id === txId);
+      if (!originalTx) return;
+
+      Object.entries(prodQuantities).forEach(([pId, qty]) => {
+        if (qty <= 0) return;
+        const itemInfo = originalTx.items.find(i => i.productId === pId);
+        if (!itemInfo) return;
+
+        selectedList.push({
+          txId,
+          customerName: originalTx.customerName || 'Walk-In',
+          productId: pId,
+          name: itemInfo.name,
+          price: itemInfo.price,
+          quantity: qty,
+          category: itemInfo.category || ('KOPI' as Category)
+        });
+
+        totalVal += itemInfo.price * qty;
+      });
+    });
+
+    return {
+      items: selectedList,
+      total: totalVal
+    };
+  }, [combineSelections, transactions]);
+
+  // Combined change computation
+  const combineChangeValue = useMemo(() => {
+    const cashNum = parseFloat(combineCashAmount) || 0;
+    if (cashNum < combinedSelectedItemsAndTotal.total) return 0;
+    return cashNum - combinedSelectedItemsAndTotal.total;
+  }, [combineCashAmount, combinedSelectedItemsAndTotal]);
+
   // Handle open add items modal
   const handleOpenAddItems = (tx: Transaction) => {
     setTxForAddItems(tx);
@@ -84,6 +144,132 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
     setCashAmount('');
     setQrisStatus('WAITING');
     setShowDoubleConfirm(false);
+  };
+
+  // Advanced combined group payment execution handler
+  const handleProcessCombinePayment = async () => {
+    if (combinedSelectedItemsAndTotal.items.length === 0) return;
+    setIsSubmitting(true);
+    try {
+      // 1. Generate unique invoice index suffix
+      const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      const uniqueSuffix = String(Math.floor(Math.random() * 900) + 100);
+      const combinedInvoiceId = `TX-${todayStr}-CB${uniqueSuffix}`;
+
+      // Aggregate all involved customer names
+      const customerNames = combinedSelectedItemsAndTotal.items
+        .map(i => i.customerName)
+        .filter((value, index, self) => self.indexOf(value) === index);
+      const customerNamesStr = customerNames.join(' + ');
+
+      // Design the base combined unpaid transaction first
+      const combinedBaseTx: Transaction = {
+        id: combinedInvoiceId,
+        timestamp: new Date().toISOString(),
+        customerName: `Gabungan (${customerNamesStr})`,
+        items: combinedSelectedItemsAndTotal.items.map(i => ({
+          productId: i.productId,
+          name: i.name,
+          price: i.price,
+          quantity: i.quantity,
+          category: i.category
+        })),
+        subtotal: combinedSelectedItemsAndTotal.total,
+        tax: 0,
+        discount: 0,
+        total: combinedSelectedItemsAndTotal.total,
+        paymentStatus: 'Belum Bayar',
+        paymentMethod: 'CASH',
+        amountPaid: 0,
+        changeAmount: 0
+      };
+
+      // Push raw combined base doc first
+      await setDoc(doc(db, 'transactions', combinedInvoiceId), combinedBaseTx);
+
+      // 2. Clear or update original pending source transactions
+      for (const [txId, prodQuantities] of Object.entries(combineSelections)) {
+        const originalTx = transactions.find(t => t.id === txId);
+        if (!originalTx) continue;
+
+        // Verify if all elements are being paid off in full
+        const isFullyPaidObj = originalTx.items.every(item => {
+          const selectedQty = prodQuantities[item.productId] || 0;
+          return selectedQty === item.quantity;
+        });
+
+        if (isFullyPaidObj) {
+          // All items checked out - remove this source pending doc to prevent duplicate debt
+          await deleteDoc(doc(db, 'transactions', txId));
+        } else {
+          // Part items paid - calculate remainder
+          const remainingItems = originalTx.items.map(item => {
+            const selectedQty = prodQuantities[item.productId] || 0;
+            const remainder = item.quantity - selectedQty;
+            return {
+              ...item,
+              quantity: remainder
+            };
+          }).filter(item => item.quantity > 0);
+
+          const remainingSubtotal = remainingItems.reduce((acc, i) => acc + (i.price * i.quantity), 0);
+
+          if (onUpdateTransactionItems) {
+            await onUpdateTransactionItems(txId, remainingItems, remainingSubtotal);
+          }
+        }
+      }
+
+      // 3. Complete payment verification step through the standard confirm API (activates main print-struk modal too)
+      const finalAmountPaid = combinePaymentMethod === 'CASH'
+        ? (parseFloat(combineCashAmount) || combinedSelectedItemsAndTotal.total)
+        : combinedSelectedItemsAndTotal.total;
+
+      const finalChange = combinePaymentMethod === 'CASH'
+        ? combineChangeValue
+        : 0;
+
+      const paymentDetails = {
+        paymentMethod: combinePaymentMethod,
+        amountPaid: finalAmountPaid,
+        changeAmount: finalChange,
+        paymentStatus: 'Lunas' as const,
+        status_pembayaran: 'Lunas',
+        metode_pembayaran: combinePaymentMethod,
+        nominal_pembayaran: finalAmountPaid,
+        nominal_kembalian: finalChange,
+        waktu_pembayaran: new Date().toISOString()
+      };
+
+      // Confirm payment triggers App.tsx active receipt popup
+      await onConfirmPayment(combinedInvoiceId, paymentDetails);
+
+      // Clean up states
+      setCombineSelections({});
+      setShowCombineModal(false);
+      setCombineDoubleConfirm(false);
+      setCombineCashAmount('');
+
+      setSuccessToast(`Pembayaran Gabungan ${combinedInvoiceId} sukses diproses.`);
+      setTimeout(() => setSuccessToast(null), 4000);
+    } catch (err) {
+      console.error('Group checkout payment failure:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Group quick cash helpers
+  const getCombineCashSuggestions = () => {
+    const total = combinedSelectedItemsAndTotal.total;
+    const standardBills = [10000, 20000, 50000, 100000, 200000, 500000];
+    const suggestions = [{ label: 'Uang Pas', value: total }];
+    standardBills.forEach(bill => {
+      if (bill >= total) {
+        suggestions.push({ label: formatIDR(bill), value: bill });
+      }
+    });
+    return suggestions;
   };
 
   // Quick cash options helper
@@ -196,16 +382,43 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
           <p className="text-xs text-stone-400">Kasir melakukan verifikasi pembayaran di sini untuk memvalidasi struk and memindahkan data transaksi.</p>
         </div>
 
-        {/* Search input bar */}
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-2.5 text-stone-400" size={15} />
-          <input
-            type="text"
-            placeholder="Cari nomor pesanan atau nama pelanggan..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#D4A373] text-xs bg-white"
-          />
+        {/* Combined payment and Search input controls */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 w-full md:w-auto">
+          {pendingTransactions.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const initialSelections: typeof combineSelections = {};
+                pendingTransactions.forEach(t => {
+                  initialSelections[t.id] = {};
+                  t.items.forEach(i => {
+                    initialSelections[t.id][i.productId] = 0;
+                  });
+                });
+                setCombineSelections(initialSelections);
+                setCombinePaymentMethod('CASH');
+                setCombineCashAmount('');
+                setCombineQrisStatus('WAITING');
+                setCombineDoubleConfirm(false);
+                setShowCombineModal(true);
+              }}
+              className="flex items-center justify-center gap-2 bg-[#D4A373] hover:bg-[#3C2A21] text-white px-4 py-2.5 rounded-xl text-xs font-bold transition duration-200 shadow-sm hover:shadow active:scale-98 cursor-pointer whitespace-nowrap"
+            >
+              <Users size={14} className="text-stone-100" />
+              <span>💳 Bayar Sekaligus (Group Pay)</span>
+            </button>
+          )}
+
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-2.5 text-stone-400" size={15} />
+            <input
+              type="text"
+              placeholder="Cari nomor pesanan atau pelanggan..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#D4A373] text-xs bg-white"
+            />
+          </div>
         </div>
       </div>
 
@@ -784,6 +997,413 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
           </div>
         </div>
       )}
+
+      {/* COMBINE MULTI-ORDER GROUP PAYMENT MODAL */}
+      {showCombineModal && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-4xl overflow-hidden shadow-2xl border border-black/5 animate-scale-in relative flex flex-col max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="px-6 py-4 bg-[#F5F2ED] border-b border-stone-200 flex justify-between items-center flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Users size={18} className="text-[#3c2a21]" />
+                <div>
+                  <h3 className="font-serif text-sm font-bold text-stone-800">Bayar Sekaligus (Split-Bill / Gabungan)</h3>
+                  <span className="text-[10px] text-stone-450 block">Pilih pesanan mandiri maupun beberapa menu milik teman untuk dibayar serentak</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowCombineModal(false);
+                  setCombineSelections({});
+                }}
+                className="text-stone-450 hover:text-stone-700 bg-white/60 hover:bg-white p-1.5 rounded-full transition cursor-pointer"
+                aria-label="Tutup"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Split Content Body */}
+            <div className="flex-1 overflow-hidden flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-stone-150">
+              
+              {/* Left Column: All Pending Orders Selector */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-stone-50/50">
+                <h4 className="text-[10px] uppercase font-bold text-stone-400 tracking-wider mb-2">Pilih Menu Dari Daftar Antrean</h4>
+                
+                {pendingTransactions.length === 0 ? (
+                  <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-stone-200 text-stone-400 text-xs font-semibold">
+                    Tidak ada pesanan antrean saat ini.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {pendingTransactions.map((tx) => {
+                      // Check if ALL items in this transaction are fully selected
+                      const isEntireTxSelected = tx.items.every(
+                        item => (combineSelections[tx.id]?.[item.productId] || 0) === item.quantity
+                      );
+
+                      return (
+                        <div key={tx.id} className="bg-white border border-stone-150 rounded-xl p-4 space-y-3 shadow-xs">
+                          {/* Order Header Selector */}
+                          <div className="flex justify-between items-center pb-2 border-b border-stone-100">
+                            <div>
+                              <span className="text-[10px] text-stone-450 font-mono font-bold block">{tx.id}</span>
+                              <span className="text-xs font-bold text-stone-800">
+                                {tx.customerName || <span className="italic font-normal text-stone-400">Walk-In</span>}
+                              </span>
+                            </div>
+
+                            {/* Select All from this custom transaction */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCombineSelections(prev => {
+                                  const next = { ...prev };
+                                  const sub = { ...next[tx.id] };
+                                  tx.items.forEach(item => {
+                                    sub[item.productId] = isEntireTxSelected ? 0 : item.quantity;
+                                  });
+                                  next[tx.id] = sub;
+                                  return next;
+                                });
+                              }}
+                              className={`text-[9px] px-2.5 py-1 rounded-lg font-bold border transition cursor-pointer
+                                ${isEntireTxSelected
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                  : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                                }`}
+                            >
+                              {isEntireTxSelected ? '✓ Semua Terpilih' : 'Pilih Semua'}
+                            </button>
+                          </div>
+
+                          {/* Items layout */}
+                          <div className="space-y-2">
+                            {tx.items.map((item) => {
+                              const maxQty = item.quantity;
+                              const selectedQty = combineSelections[tx.id]?.[item.productId] || 0;
+
+                              return (
+                                <div key={item.productId} className="flex justify-between items-center text-xs py-1">
+                                  <div className="flex-1 pr-3">
+                                    <span className="font-semibold text-stone-850 block">{item.name}</span>
+                                    <span className="text-[10px] text-stone-400 font-mono font-bold">
+                                      {formatIDR(item.price)} x{item.quantity} tersedia
+                                    </span>
+                                  </div>
+
+                                  {/* Stepper controls */}
+                                  <div className="flex items-center gap-2.5 bg-stone-100 px-2 py-1 rounded-xl border border-stone-200">
+                                    <button
+                                      type="button"
+                                      disabled={selectedQty <= 0}
+                                      onClick={() => {
+                                        setCombineSelections(prev => {
+                                          const next = { ...prev };
+                                          const sub = { ...next[tx.id] };
+                                          sub[item.productId] = Math.max(0, selectedQty - 1);
+                                          next[tx.id] = sub;
+                                          return next;
+                                        });
+                                      }}
+                                      className="hover:bg-stone-200 text-[#3C2A21] w-5 h-5 rounded-md flex items-center justify-center font-black transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                    >
+                                      <Minus size={10} className="font-bold" />
+                                    </button>
+
+                                    <span className={`font-mono text-[10px] font-bold text-center min-w-10 ${selectedQty > 0 ? 'text-[#D4A373]' : 'text-stone-450'}`}>
+                                      {selectedQty} / {maxQty}
+                                    </span>
+
+                                    <button
+                                      type="button"
+                                      disabled={selectedQty >= maxQty}
+                                      onClick={() => {
+                                        setCombineSelections(prev => {
+                                          const next = { ...prev };
+                                          const sub = { ...next[tx.id] };
+                                          sub[item.productId] = Math.min(maxQty, selectedQty + 1);
+                                          next[tx.id] = sub;
+                                          return next;
+                                        });
+                                      }}
+                                      className="hover:bg-stone-200 text-[#3C2A21] w-5 h-5 rounded-md flex items-center justify-center font-black transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                    >
+                                      <Plus size={10} className="font-bold" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column: checkout calculation overview */}
+              <div className="w-full md:w-96 overflow-y-auto p-5 flex flex-col justify-between space-y-5 bg-white">
+                <div className="space-y-4">
+                  <h4 className="text-[10px] uppercase font-bold text-stone-500 tracking-wider">Ringkasan Pembayaran Gabungan</h4>
+                  
+                  {/* Selected items list representation */}
+                  {combinedSelectedItemsAndTotal.items.length === 0 ? (
+                    <div className="py-12 text-center text-stone-400 text-xs bg-stone-50 rounded-2xl border border-dashed border-stone-200 p-4">
+                      Belum ada menu yang dipilih. Klik tombol stepper di sebelah kiri untuk memasukkan menu teman yang ingin dibayar sekaligus.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 border border-stone-150 rounded-2xl p-3 bg-stone-50 max-h-48 overflow-y-auto">
+                      {combinedSelectedItemsAndTotal.items.map((it, idx) => (
+                        <div key={idx} className="flex justify-between items-start text-[11px] py-1 border-b border-stone-200/50 last:border-0 last:pb-0">
+                          <div>
+                            <span className="font-bold text-stone-800 line-clamp-1">{it.name}</span>
+                            <span className="text-[9px] text-stone-450 block font-mono">ID: {it.txId} ({it.customerName})</span>
+                          </div>
+                          <div className="text-right font-mono font-bold text-stone-700 whitespace-nowrap pl-2">
+                            <span>x{it.quantity}</span>
+                            <span className="text-[9px] text-stone-400 block font-normal">{formatIDR(it.price * it.quantity)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Combined billing values */}
+                  {combinedSelectedItemsAndTotal.items.length > 0 && (
+                    <div className="bg-[#3C2A21] text-white p-4.5 rounded-2xl flex justify-between items-center text-sm font-sans">
+                      <span className="font-bold">TOTAL GABUNGAN:</span>
+                      <span className="text-lg font-black font-mono text-[#D4A373]">
+                        {formatIDR(combinedSelectedItemsAndTotal.total)}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Payment Methods */}
+                  {combinedSelectedItemsAndTotal.items.length > 0 && (
+                    <div className="space-y-2.5">
+                      <label className="text-[10px] text-stone-400 uppercase tracking-wider font-bold block">Pilih Metode Pembayaran</label>
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCombinePaymentMethod('CASH');
+                            setCombineCashAmount('');
+                          }}
+                          className={`py-2 px-3 rounded-xl text-xs font-bold transition border flex items-center justify-center gap-1.5 cursor-pointer
+                            ${combinePaymentMethod === 'CASH'
+                              ? 'bg-[#3C2A21] border-[#3C2A21] text-white shadow-sm'
+                              : 'bg-white border-stone-200 text-[#3C2A21] hover:bg-stone-50'
+                            }`}
+                        >
+                          <DollarSign size={13} />
+                          <span>Tunai</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCombinePaymentMethod('QRIS');
+                            setCombineQrisStatus('WAITING');
+                          }}
+                          className={`py-2 px-3 rounded-xl text-xs font-bold transition border flex items-center justify-center gap-1.5 cursor-pointer
+                            ${combinePaymentMethod === 'QRIS'
+                              ? 'bg-[#3C2A21] border-[#3C2A21] text-white shadow-sm'
+                              : 'bg-white border-stone-200 text-[#3C2A21] hover:bg-stone-50'
+                            }`}
+                        >
+                          <Smartphone size={13} />
+                          <span>QRIS</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Cash logic */}
+                  {combinedSelectedItemsAndTotal.items.length > 0 && combinePaymentMethod === 'CASH' && (
+                    <div className="space-y-3.5 animate-in fade-in duration-200">
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-stone-400 uppercase tracking-wider font-bold block">Saran Uang Tunai</span>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {getCombineCashSuggestions().slice(0, 6).map((sug, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setCombineCashAmount(sug.value.toString())}
+                              className="bg-stone-50 hover:bg-[#F5F2ED] border border-stone-200 hover:border-stone-300 text-stone-700 font-mono text-[9px] font-bold py-1.5 px-1 rounded-lg transition overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer text-center"
+                            >
+                              {sug.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[10px] text-stone-400 uppercase tracking-wider font-bold block">Nominal Tunai</label>
+                          {parseFloat(combineCashAmount) > 0 && parseFloat(combineCashAmount) < combinedSelectedItemsAndTotal.total && (
+                            <span className="text-[9px] font-bold text-rose-500">Nominal kurang</span>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <span className="absolute left-3 top-2 px-0 text-xs font-mono font-bold text-stone-400">Rp</span>
+                          <input
+                            type="number"
+                            placeholder="Menerima tunai..."
+                            value={combineCashAmount}
+                            onChange={(e) => setCombineCashAmount(e.target.value)}
+                            className="w-full pl-8 pr-3 py-1.5 border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#D4A373] text-xs font-mono font-bold bg-white text-stone-850"
+                          />
+                        </div>
+                      </div>
+
+                      {parseFloat(combineCashAmount) >= combinedSelectedItemsAndTotal.total && (
+                        <div className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100 text-[11px] space-y-1 font-mono">
+                          <div className="flex justify-between text-stone-600">
+                            <span>Total Gabungan:</span>
+                            <span>{formatIDR(combinedSelectedItemsAndTotal.total)}</span>
+                          </div>
+                          <div className="flex justify-between text-stone-600">
+                            <span>Menerima:</span>
+                            <span>{formatIDR(parseFloat(combineCashAmount))}</span>
+                          </div>
+                          <div className="flex justify-between text-emerald-800 font-bold border-t border-dashed border-emerald-200 pt-1 mt-1">
+                            <span>KEMBALIAN:</span>
+                            <span>{formatIDR(combineChangeValue)}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* QRIS Layout */}
+                  {combinedSelectedItemsAndTotal.items.length > 0 && combinePaymentMethod === 'QRIS' && (
+                    <div className="space-y-3.5 text-center bg-stone-50 p-4 rounded-2xl border border-stone-150 animate-in fade-in duration-200">
+                      <div className="bg-white p-3 rounded-xl border border-stone-205 inline-block">
+                        <svg width="100" height="100" viewBox="0 0 200 200" className="mx-auto block">
+                          <rect width="200" height="200" fill="#FFFFFF" rx="10" />
+                          <rect x="75" y="75" width="50" height="50" fill="#111827" rx="8" />
+                          <text x="100" y="103" fontSize="11" fill="#FFFFFF" fontFamily="sans-serif" fontWeight="black" textAnchor="middle">QRIS</text>
+                          <rect x="15" y="15" width="40" height="40" fill="#111827" rx="4" />
+                          <rect x="23" y="23" width="24" height="24" fill="#FFFFFF" rx="2" />
+                          <rect x="29" y="29" width="12" height="12" fill="#111827" rx="1" />
+                          <rect x="145" y="15" width="40" height="40" fill="#111827" rx="4" />
+                          <rect x="153" y="23" width="24" height="24" fill="#FFFFFF" rx="2" />
+                          <rect x="159" y="29" width="12" height="12" fill="#111827" rx="1" />
+                          <rect x="15" y="145" width="40" height="40" fill="#111827" rx="4" />
+                          <rect x="23" y="153" width="24" height="24" fill="#FFFFFF" rx="2" />
+                          <rect x="29" y="159" width="12" height="12" fill="#111827" rx="1" />
+                          <g fill="#1F2937" opacity="0.8">
+                            <rect x="65" y="15" width="10" height="15" />
+                            <rect x="80" y="25" width="15" height="10" />
+                            <rect x="105" y="15" width="20" height="15" />
+                            <rect x="130" y="30" width="10" height="25" />
+                            <rect x="15" y="65" width="15" height="10" />
+                            <rect x="40" y="65" width="25" height="15" />
+                            <rect x="135" y="65" width="15" height="20" />
+                            <rect x="155" y="80" width="30" height="10" />
+                            <rect x="65" y="145" width="15" height="35" />
+                            <rect x="105" y="170" width="15" height="15" />
+                            <rect x="130" y="150" width="10" height="35" />
+                          </g>
+                        </svg>
+                      </div>
+
+                      <div className="flex items-center justify-center gap-1.5 mt-2">
+                        {combineQrisStatus === 'WAITING' ? (
+                          <span className="bg-amber-50 text-amber-700 border border-amber-200 py-1 px-2.5 rounded-full text-[9px] font-bold block animate-pulse">
+                            Menunggu scan QRIS...
+                          </span>
+                        ) : (
+                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 py-1 px-2.5 rounded-full text-[9px] font-bold block">
+                            ✓ Pembayaran OK
+                          </span>
+                        )}
+                      </div>
+
+                      {combineQrisStatus === 'WAITING' && (
+                        <button
+                          type="button"
+                          onClick={() => setCombineQrisStatus('SUCCESS')}
+                          className="text-[10px] text-[#A57C55] hover:text-[#3C2A21] underline font-bold cursor-pointer block mx-auto mt-2"
+                        >
+                          Simulasikan Scan Sukses
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Confirm Action triggers */}
+                <div className="pt-4 border-t border-stone-150 mt-4">
+                  <button
+                    type="button"
+                    disabled={
+                      combinedSelectedItemsAndTotal.items.length === 0 ||
+                      (combinePaymentMethod === 'CASH' && (parseFloat(combineCashAmount) || 0) < combinedSelectedItemsAndTotal.total) ||
+                      (combinePaymentMethod === 'QRIS' && combineQrisStatus !== 'SUCCESS') ||
+                      isSubmitting
+                    }
+                    onClick={() => setCombineDoubleConfirm(true)}
+                    className={`w-full py-3.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer
+                      ${
+                        combinedSelectedItemsAndTotal.items.length === 0 ||
+                        (combinePaymentMethod === 'CASH' && (parseFloat(combineCashAmount) || 0) < combinedSelectedItemsAndTotal.total) ||
+                        (combinePaymentMethod === 'QRIS' && combineQrisStatus !== 'SUCCESS') ||
+                        isSubmitting
+                          ? 'bg-stone-200 text-stone-400 cursor-not-allowed shadow-none'
+                          : 'bg-[#3C2A21] hover:bg-[#201510] text-white shadow-[#3C2A21]/15 active:scale-98'
+                      }`}
+                  >
+                    <span>{isSubmitting ? 'Memproses...' : 'Proses Bayar Gabungan'}</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* COMBINE DOUBLE CONFIRM OVERLAY DIALOG */}
+            {combineDoubleConfirm && (
+              <div className="absolute inset-0 bg-stone-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in z-50">
+                <div className="bg-white rounded-2xl w-full max-w-xs p-5 text-center space-y-4 animate-scale-in">
+                  <div className="w-12 h-12 bg-amber-50 text-amber-600 border border-amber-100 rounded-full flex items-center justify-center mx-auto">
+                    <AlertTriangle size={22} className="animate-pulse" />
+                  </div>
+                  <div>
+                    <h4 className="font-serif text-sm font-bold text-stone-800">Konfirmasi Kelompok</h4>
+                    <p className="text-[11px] text-stone-450 mt-1.5 leading-relaxed">
+                      Apakah Anda benar-benar ingin memproses pembayaran gabungan ini sebesar <strong className="text-stone-700 font-mono">{formatIDR(combinedSelectedItemsAndTotal.total)}</strong>? Tindakan ini akan mengupdate antrean pesanan masing-masing.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2.5 pt-2">
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => setCombineDoubleConfirm(false)}
+                      className="flex-1 py-2 bg-stone-100 hover:bg-stone-200 text-stone-600 rounded-xl text-xs font-semibold transition border border-stone-100 cursor-pointer disabled:opacity-50"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={handleProcessCombinePayment}
+                      className="flex-1 py-2 bg-[#3C2A21] hover:bg-stone-900 text-white rounded-xl text-xs font-bold transition flex items-center justify-center cursor-pointer disabled:opacity-50"
+                    >
+                      {isSubmitting ? 'Proses...' : 'Ya, Bayar'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
