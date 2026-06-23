@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Transaction, Product } from '../types';
-import { TrendingUp, DollarSign, ShoppingBag, Award, Clock, ArrowUpRight, ArrowDownRight, Coffee, Utensils, Sparkles, AlertCircle, Trash2, RotateCcw, Calendar } from 'lucide-react';
+import { TrendingUp, DollarSign, ShoppingBag, Award, Clock, ArrowUpRight, ArrowDownRight, Coffee, Utensils, Sparkles, AlertCircle, Trash2, RotateCcw, Calendar, Users, Trophy, Crown } from 'lucide-react';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -289,6 +289,49 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5); // top 5
   }, [transactions, products]);
+
+  // 4b. Top 3 Customers who order most frequently
+  const topCustomers = useMemo(() => {
+    const counts: Record<string, { name: string; count: number; totalSpent: number }> = {};
+    
+    transactions.forEach(t => {
+      const name = t.customerName ? t.customerName.trim() : '';
+      if (!name) return;
+      
+      const lowerName = name.toLowerCase();
+      if (lowerName === 'walk-in' || lowerName === 'walk in' || lowerName === 'anonymous') return;
+      
+      // Parse combined names if multi name matches: "Gabungan (X + Y)"
+      if (name.includes('Gabungan (')) {
+        const match = name.match(/\(([^)]+)\)/);
+        if (match && match[1]) {
+          const names = match[1].split('+').map(n => n.trim());
+          names.forEach(individualName => {
+            if (!individualName) return;
+            const indLower = individualName.toLowerCase();
+            if (indLower === 'walk-in' || indLower === 'walk in') return;
+            
+            if (!counts[indLower]) {
+              counts[indLower] = { name: individualName, count: 0, totalSpent: 0 };
+            }
+            counts[indLower].count += 1;
+            counts[indLower].totalSpent += t.total / names.length;
+          });
+          return;
+        }
+      }
+
+      if (!counts[lowerName]) {
+        counts[lowerName] = { name: t.customerName, count: 0, totalSpent: 0 };
+      }
+      counts[lowerName].count += 1;
+      counts[lowerName].totalSpent += t.total;
+    });
+
+    return Object.values(counts)
+      .sort((a, b) => b.count - a.count || b.totalSpent - a.totalSpent)
+      .slice(0, 3);
+  }, [transactions]);
 
   // 5. Category distribution
   const categorySplit = useMemo(() => {
@@ -656,47 +699,64 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
           )}
         </div>
 
-        {/* Latest Transactions Column */}
+        {/* Top 3 Customers Column */}
         <div className="bg-white p-5 rounded-2xl border border-black/5 shadow-sm flex flex-col">
-          <div className="mb-4 flex justify-between items-center">
-            <div>
-              <h3 className="font-serif text-lg font-bold text-stone-800 flex items-center gap-2">
-                <Clock className="text-stone-700" size={20} /> Aktivitas Transaksi Terakhir
-              </h3>
-              <p className="text-xs text-[#8E8D8A]">Pembayaran selesai paling baru oleh kasir</p>
-            </div>
+          <div className="mb-4">
+            <h3 className="font-serif text-lg font-bold text-stone-800 flex items-center gap-2">
+              <Trophy className="text-amber-500 fill-amber-100" size={20} /> Top 3 Pelanggan Teraktif
+            </h3>
+            <p className="text-xs text-[#8E8D8A]">Nama pelanggan dengan frekuensi pesanan terbanyak</p>
           </div>
 
-          {latestTransactions.length === 0 ? (
+          {topCustomers.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center py-10 text-center text-[#8E8D8A]">
-              <ShoppingBag size={36} className="mb-2 opacity-50" />
-              <p className="text-sm font-medium">Belum ada transaksi</p>
-              <button 
-                onClick={onNavigateToPOS}
-                className="mt-2 text-xs text-[#D4A373] font-semibold underline"
-              >
-                Buat pesanan pertama sekarang!
-              </button>
+              <Users size={36} className="mb-2 opacity-50" />
+              <p className="text-sm font-medium">Belum ada pelanggan teraktif</p>
+              <p className="text-xs max-w-xs mt-1">Lakukan pesanan dan masukkan nama pelanggan di Kasir untuk melihat data.</p>
             </div>
           ) : (
-            <div className="divide-y divide-stone-100 flex-1">
-              {latestTransactions.map((tx) => (
-                <div key={tx.id} className="flex justify-between items-center py-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-stone-800 font-mono">{tx.id}</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold font-mono
-                        ${tx.paymentMethod === 'QRIS' ? 'bg-sky-50 text-sky-700 border border-sky-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>
-                        {tx.paymentMethod}
+            <div className="divide-y divide-stone-100 flex-1 flex flex-col justify-center space-y-1">
+              {topCustomers.map((customer, idx) => (
+                <div key={idx} className="flex justify-between items-center py-4 first:pt-2 last:pb-2">
+                  <div className="flex items-center gap-3.5">
+                    <div className="relative pt-2.5">
+                      {/* Stylized Crowns (Gold, Silver, Bronze) */}
+                      {idx === 0 && (
+                        <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 z-10 animate-bounce" style={{ animationDuration: '3s' }}>
+                          <Crown size={15} className="text-amber-500 fill-amber-300 filter drop-shadow-[0_1px_2px_rgba(245,158,11,0.5)]" />
+                        </div>
+                      )}
+                      {idx === 1 && (
+                        <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 z-10">
+                          <Crown size={14} className="text-stone-400 fill-stone-200 filter drop-shadow-[0_1px_2px_rgba(156,163,175,0.4)]" />
+                        </div>
+                      )}
+                      {idx === 2 && (
+                        <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 z-10">
+                          <Crown size={13} className="text-amber-700 fill-[#D4A373]/50 filter drop-shadow-[0_1px_2px_rgba(180,83,9,0.3)]" />
+                        </div>
+                      )}
+                      
+                      <span className={`w-8 h-8 flex items-center justify-center rounded-xl text-sm font-black transition-transform duration-300 hover:scale-105 relative
+                        ${idx === 0 
+                          ? 'bg-gradient-to-br from-amber-300 to-amber-500 text-stone-900 border border-amber-200' 
+                          : idx === 1 
+                            ? 'bg-gradient-to-br from-stone-150 to-stone-300 text-stone-800 border border-stone-250' 
+                            : 'bg-gradient-to-br from-[#D4A373]/30 to-[#D4A373]/60 text-[#3C2A21] border border-[#D4A373]/20'}`}>
+                        {idx + 1}
                       </span>
                     </div>
-                    <div className="text-[11px] text-stone-500 font-sans">
-                      Pelanggan: <strong className="text-stone-700">{tx.customerName || 'Walk-In'}</strong> • {new Date(tx.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                    <div>
+                      <h4 className="text-sm font-bold text-stone-850 leading-tight capitalize">{customer.name}</h4>
+                      <span className="text-[10px] text-stone-500 font-medium font-mono">
+                        Belanja: {formatIDR(customer.totalSpent)}
+                      </span>
                     </div>
                   </div>
-                  <div className="text-right space-y-1">
-                    <span className="block text-sm font-bold text-[#3C2A21] font-mono">{formatIDR(tx.total)}</span>
-                    <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full inline-block font-semibold">Selesai</span>
+                  <div className="text-right">
+                    <span className="bg-[#FAF7F2] border border-[#3C2A21]/5 text-[#3C2A21] font-mono text-xs font-bold px-3 py-1 rounded-full shadow-2xs">
+                      {customer.count}x Pesanan
+                    </span>
                   </div>
                 </div>
               ))}
