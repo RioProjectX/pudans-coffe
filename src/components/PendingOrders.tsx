@@ -187,6 +187,22 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
     return transactions.filter(t => t.paymentStatus === 'Belum Bayar' || t.paymentStatus === 'Belum Dibayar');
   }, [transactions]);
 
+  // STAGE 9: Log when pending transactions successfully update and render in the list
+  useEffect(() => {
+    if (pendingTransactions.length > 0) {
+      console.log(`[STAGE 9: UI RENDERING UPDATE] Pending transactions list updated and rendered! Showing ${pendingTransactions.length} active order(s):`, 
+        pendingTransactions.map(t => ({
+          id: t.id,
+          customerName: t.customerName || 'No Name',
+          total: t.total,
+          itemsCount: t.items.length
+        }))
+      );
+    } else {
+      console.log(`[STAGE 9: UI RENDERING UPDATE] No pending orders in the active queue. Displaying empty state.`);
+    }
+  }, [pendingTransactions]);
+
   // Apply search query filter
   const filteredPending = useMemo(() => {
     if (!searchQuery.trim()) return pendingTransactions;

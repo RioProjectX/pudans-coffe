@@ -198,12 +198,19 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
                   `}
                 >
                   {/* Tx code */}
-                  <div className="w-full md:w-32 flex items-center gap-2 justify-between md:justify-start">
-                    <span className="font-bold font-mono text-[#3C2A21]">{tx.id}</span>
-                    <span className={`block md:hidden text-[10px] font-mono px-2 py-0.5 rounded-md font-semibold
-                      ${tx.paymentMethod === 'QRIS' ? 'bg-sky-100 text-sky-800' : 'bg-emerald-100 text-emerald-800'}`}>
-                      {tx.paymentMethod}
-                    </span>
+                  <div className="w-full md:w-32 flex flex-col items-start gap-0.5 justify-center">
+                    <div className="flex items-center gap-2 justify-between w-full md:w-auto">
+                      <span className="font-bold font-mono text-[#3C2A21]">{tx.id}</span>
+                      <span className={`block md:hidden text-[10px] font-mono px-2 py-0.5 rounded-md font-semibold
+                        ${tx.paymentMethod === 'QRIS' ? 'bg-sky-100 text-sky-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                        {tx.paymentMethod}
+                      </span>
+                    </div>
+                    {tx.isBackfill && (
+                      <span className="bg-amber-100/70 border border-amber-200 text-amber-800 text-[8px] font-extrabold uppercase px-1 py-0.2 rounded-sm leading-none font-mono tracking-wider animate-pulse">
+                        ⏪ BACKFILL
+                      </span>
+                    )}
                   </div>
 
                   {/* Stamp */}
@@ -305,7 +312,52 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
                   <span className="text-stone-500">Metode Pembayaran:</span>
                   <span className="font-bold text-stone-800">{selectedTxObj.paymentMethod}</span>
                 </div>
+                {selectedTxObj.notes && (
+                  <div className="flex justify-between border-t border-stone-200/50 pt-1 mt-1 text-left">
+                    <span className="text-stone-500">Catatan:</span>
+                    <span className="font-bold text-stone-700 max-w-[150px] break-all text-right">{selectedTxObj.notes}</span>
+                  </div>
+                )}
               </div>
+
+              {/* Backfill Audit Log */}
+              {selectedTxObj.isBackfill && (
+                <div className="bg-amber-50/70 border border-amber-200/80 p-3.5 rounded-xl space-y-2 text-left animate-in fade-in slide-in-from-top duration-350">
+                  <h5 className="text-[10px] font-extrabold text-amber-850 uppercase tracking-wider flex items-center gap-1 font-mono">
+                    ⏪ Audit Log Backfill
+                  </h5>
+                  <div className="space-y-1.5 text-[11px] text-stone-600 font-sans">
+                    <div className="flex justify-between">
+                      <span>Diinput Oleh:</span>
+                      <span className="font-bold text-stone-800 uppercase font-mono text-[10px]">{selectedTxObj.backfilledBy || 'ADMIN'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Waktu Input:</span>
+                      <span className="font-bold text-stone-800">
+                        {selectedTxObj.created_at ? formatDate(selectedTxObj.created_at) : '-'}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-0.5 border-t border-dashed border-amber-250/50 pt-1 mt-1">
+                      <span className="text-stone-500">Alasan Backfill:</span>
+                      <span className="font-medium text-amber-900 break-words bg-amber-100/30 px-2 py-1 rounded-md mt-0.5 border border-amber-100/50">
+                        {selectedTxObj.backfillReason || 'No reason provided'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-t border-dashed border-amber-250/50 pt-1.5 mt-1">
+                      <span>Sesuaikan Stok:</span>
+                      <span className="font-bold text-stone-800">
+                        {selectedTxObj.adjustStock ? 'Ya (Stok Dipotong)' : 'Tidak'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Status Stok:</span>
+                      <span className={`font-bold ${selectedTxObj.stockAdjusted ? 'text-emerald-700' : 'text-stone-500'}`}>
+                        {selectedTxObj.stockAdjusted ? '✅ Terpotong' : '❌ Tidak Terpotong'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Basket list details */}
               <div className="space-y-2">

@@ -8,12 +8,48 @@ import History from './components/History';
 import ReceiptModal from './components/ReceiptModal';
 import PendingOrders from './components/PendingOrders';
 import { Coffee, LayoutDashboard, ShoppingBag, FolderOpen, Receipt, Clock } from 'lucide-react';
-import { collection, onSnapshot, setDoc, deleteDoc, doc, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, setDoc, deleteDoc, doc, getDocs, writeBatch, getDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: null,
+      email: null,
+    },
+    operationType,
+    path
+  };
+  console.error('[DATABASE TELEMENTRY ERROR] Firestore operation failed: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 export default function App() {
   // Navigation
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'POS' | 'PENDING' | 'CATALOG' | 'HISTORY'>('DASHBOARD');
+
+  // User Access Control Role
+  const [userRole, setUserRole] = useState<'KASIR' | 'ADMIN' | 'OWNER'>('ADMIN');
 
   // Core Synchronization States loaded from Firebase Cloud Database
   const [products, setProducts] = useState<Product[]>([]);
@@ -57,6 +93,7 @@ export default function App() {
 
   // Live Sync Transactions from Firestore
   useEffect(() => {
+    console.log('[STAGE 8: LIVE SYNC LISTENER] Attaching live real-time observer to firestore transactions...');
     const unsubscribe = onSnapshot(collection(db, 'transactions'), (snapshot) => {
       const txList: Transaction[] = [];
       snapshot.forEach((document) => {
@@ -64,12 +101,24 @@ export default function App() {
       });
       // Sort descending based on timestamp
       txList.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      
+      console.log(`[STAGE 8: LIVE SYNC UPDATED] Real-time Firestore transaction count: ${txList.length}`, {
+        total: txList.length,
+        pending: txList.filter(t => t.paymentStatus === 'Belum Bayar').length,
+        unpaidIds: txList.filter(t => t.paymentStatus === 'Belum Bayar').map(t => t.id),
+        latestId: txList.length > 0 ? txList[0].id : 'None'
+      });
+      
       setTransactions(txList);
     }, (error) => {
-      console.error('Firestore transactions snapshot error:', error);
+      console.error('[STAGE 8: LIVE SYNC ERROR] Snapshot failed:', error);
+      handleFirestoreError(error, OperationType.GET, 'transactions');
     });
 
-    return () => unsubscribe();
+    return () => {
+      console.log('[STAGE 8: LIVE SYNC LISTENER] Detaching observer from firestore transactions');
+      unsubscribe();
+    };
   }, []);
 
   // Update clock every second
@@ -153,6 +202,24 @@ export default function App() {
     }
   };
 
+  // Helper to adjust product stock in database
+  const adjustProductStock = async (productId: string, quantityToDeduct: number) => {
+    try {
+      const prodRef = doc(db, 'products', productId);
+      const snap = await getDoc(prodRef);
+      if (snap.exists()) {
+        const prodData = snap.data();
+        if (prodData && prodData.stock !== undefined) {
+          const newStock = Math.max(0, prodData.stock - quantityToDeduct);
+          await setDoc(prodRef, { stock: newStock }, { merge: true });
+          console.log(`[STOCK ADJUST] Deducted stock for ${productId} by ${quantityToDeduct}. New stock: ${newStock}`);
+        }
+      }
+    } catch (error) {
+      console.error(`[STOCK ADJUST ERROR] Failed to adjust stock for product ${productId}:`, error);
+    }
+  };
+
   // 2. POS Handler
   const handleCheckout = async (details: {
     items: { productId: string; name: string; price: number; quantity: number; category: Category }[];
@@ -164,25 +231,105 @@ export default function App() {
     amountPaid: number;
     changeAmount: number;
     customerName: string;
+    notes?: string;
+    paymentStatus?: 'Belum Bayar' | 'Lunas';
+    isBackfill?: boolean;
+    backfillDate?: string;
+    backfillTime?: string;
+    backfilledBy?: string;
+    backfillReason?: string;
+    adjustStock?: boolean;
   }) => {
-    const todayStr = currentTime.toISOString().split('T')[0].replace(/-/g, '');
-    const dailyTxCount = transactions.filter(t => t.timestamp.startsWith(currentTime.toISOString().split('T')[0])).length + 1;
+    let timestampStr = new Date().toISOString();
+    let todayStr = timestampStr.split('T')[0].replace(/-/g, '');
+
+    // Chronological routing for backfills
+    if (details.isBackfill && details.backfillDate) {
+      const selectedDateTime = new Date(`${details.backfillDate}T${details.backfillTime || '12:00'}`);
+      if (!isNaN(selectedDateTime.getTime())) {
+        timestampStr = selectedDateTime.toISOString();
+        todayStr = details.backfillDate.replace(/-/g, '');
+      }
+    }
     
-    // Generate unique index sequence
-    const invoiceId = `TX-${todayStr}-${String(dailyTxCount).padStart(3, '0')}`;
+    console.log(`[STAGE 4: RECEIVE REQUEST] App.tsx handleCheckout received payload:`, {
+      timestamp: timestampStr,
+      customerName: details.customerName,
+      itemsCount: details.items.length,
+      total: details.total,
+      paymentMethod: details.paymentMethod,
+      isBackfill: details.isBackfill,
+    });
+
+    // Generate unique index sequence by finding the highest current sequence number for today
+    const todayPrefix = `TX-${todayStr}-`;
+    const todayTxs = transactions.filter(t => t.id.startsWith(todayPrefix));
+    
+    let maxNum = 0;
+    todayTxs.forEach(t => {
+      // id formats can be TX-YYYYMMDD-### or TX-YYYYMMDD-###-RAND
+      const parts = t.id.split('-');
+      if (parts.length >= 3) {
+        const numPart = parseInt(parts[2], 10);
+        if (!isNaN(numPart) && numPart > maxNum) {
+          maxNum = numPart;
+        }
+      }
+    });
+
+    const nextNum = maxNum + 1;
+    let invoiceId = `TX-${todayStr}-${String(nextNum).padStart(3, '0')}`;
+
+    console.log(`[STAGE 5: SERIAL CALCULATION] Base ID calculated:`, {
+      todayCountFromState: todayTxs.length,
+      maxSeqNumFound: maxNum,
+      nextSeqNum: nextNum,
+      computedBaseInvoiceId: invoiceId
+    });
+
+    // Collision Check: If this ID already exists, append a 3-character random alphanumeric code
+    const idExists = transactions.some(t => t.id === invoiceId);
+    if (idExists) {
+      const randomSuffix = Math.random().toString(36).substring(2, 5).toUpperCase();
+      const collidedId = invoiceId;
+      invoiceId = `${invoiceId}-${randomSuffix}`;
+      console.warn(`[STAGE 5: ID COLLISION PREVENTED] Invoice ID ${collidedId} already exists! Collided due to concurrency or deletion. Appended suffix: -${randomSuffix}. New Invoice ID: ${invoiceId}`);
+    }
+
+    const finalPaymentStatus = details.paymentStatus || 'Belum Bayar';
 
     const freshTx: Transaction = {
       id: invoiceId,
-      timestamp: currentTime.toISOString(),
+      timestamp: timestampStr,
+      created_at: new Date().toISOString(),
+      transaction_date: details.isBackfill && details.backfillDate ? details.backfillDate : timestampStr.split('T')[0],
+      isBackfill: details.isBackfill || false,
+      backfilledBy: details.backfilledBy || undefined,
+      backfillReason: details.backfillReason || undefined,
+      adjustStock: details.adjustStock ?? false,
+      notes: details.notes || undefined,
+      stockAdjusted: false,
       ...details,
-      paymentStatus: 'Belum Bayar'
+      paymentStatus: finalPaymentStatus
     };
+
+    // Auto-adjust stock immediately for direct paid backfills
+    if (freshTx.isBackfill && freshTx.paymentStatus === 'Lunas' && freshTx.adjustStock) {
+      console.log(`[BACKFILL STOCK ACTION] Direct paid backfill with adjustStock = true. Deducting stock now...`);
+      for (const item of freshTx.items) {
+        await adjustProductStock(item.productId, item.quantity);
+      }
+      freshTx.stockAdjusted = true;
+    }
+
+    console.log(`[STAGE 6: DATABASE SAVE] Writing transaction document to Firestore. ID: ${invoiceId}`, freshTx);
 
     try {
       await setDoc(doc(db, 'transactions', invoiceId), freshTx);
-      // Removed instant setActiveReceipt to adhere to new order creation flow
+      console.log(`[STAGE 7: DATABASE RESPONSE SUCCESS] Document ${invoiceId} successfully written to Firestore.`);
     } catch (error) {
-      console.error('Error recording checkout transaction to Firestore:', error);
+      console.error(`[STAGE 7: DATABASE RESPONSE ERROR] Failed to write ${invoiceId} to Firestore:`, error);
+      handleFirestoreError(error, OperationType.WRITE, `transactions/${invoiceId}`);
     }
   };
 
@@ -197,6 +344,19 @@ export default function App() {
         paymentStatus: 'Lunas',
         status_pembayaran: 'Lunas',
       };
+
+      // Handle stock adjustment upon successful confirmation
+      const shouldAdjustStock = baseTx.isBackfill 
+        ? (baseTx.adjustStock && !baseTx.stockAdjusted)
+        : !baseTx.stockAdjusted;
+
+      if (shouldAdjustStock) {
+        console.log(`[PAYMENT CONFIRM STOCK ACTION] Deducting stock for transaction items...`);
+        for (const item of baseTx.items) {
+          await adjustProductStock(item.productId, item.quantity);
+        }
+        lunasTx.stockAdjusted = true;
+      }
 
       await setDoc(doc(db, 'transactions', txId), lunasTx);
       setActiveReceipt(lunasTx);
@@ -250,11 +410,30 @@ export default function App() {
               </div>
               
               {/* WIB clock */}
-              <div className="flex items-center gap-1.5 text-[10px] text-[#F5F2ED]/60 font-mono mt-0.5">
-                <Clock size={11} className="text-[#D4A373]" />
-                <span>
-                  {currentTime.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} • {currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} WIB
-                </span>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-1">
+                <div className="flex items-center gap-1.5 text-[10px] text-[#F5F2ED]/60 font-mono">
+                  <Clock size={11} className="text-[#D4A373]" />
+                  <span>
+                    {currentTime.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} • {currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} WIB
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1 bg-black/20 p-0.5 rounded-lg border border-white/5 text-[9px] font-mono">
+                  <span className="text-white/40 px-1 text-[8px] uppercase font-bold">Role:</span>
+                  {(['KASIR', 'ADMIN', 'OWNER'] as const).map((role) => (
+                    <button
+                      key={role}
+                      onClick={() => setUserRole(role)}
+                      className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase transition cursor-pointer ${
+                        userRole === role
+                          ? 'bg-[#D4A373] text-white shadow-sm'
+                          : 'text-white/55 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      {role}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -313,6 +492,7 @@ export default function App() {
           {activeTab === 'POS' && (
             <POS 
               products={products}
+              userRole={userRole}
               onCheckout={handleCheckout}
             />
           )}

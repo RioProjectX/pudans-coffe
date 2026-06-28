@@ -4,6 +4,7 @@ import { Search, ShoppingCart, Plus, Minus, Trash2, User, Ticket, HelpCircle, Sp
 
 interface POSProps {
   products: Product[];
+  userRole?: 'KASIR' | 'ADMIN' | 'OWNER';
   onCheckout: (transactionDetails: {
     items: { productId: string; name: string; price: number; quantity: number; category: Category }[];
     subtotal: number;
@@ -14,10 +15,18 @@ interface POSProps {
     amountPaid: number;
     changeAmount: number;
     customerName: string;
-  }) => void;
+    notes?: string;
+    paymentStatus?: 'Belum Bayar' | 'Lunas';
+    isBackfill?: boolean;
+    backfillDate?: string;
+    backfillTime?: string;
+    backfilledBy?: string;
+    backfillReason?: string;
+    adjustStock?: boolean;
+  }) => Promise<void> | any;
 }
 
-export default function POS({ products, onCheckout }: POSProps) {
+export default function POS({ products, userRole = 'KASIR', onCheckout }: POSProps) {
   // POS States
   const [activeCategory, setActiveCategory] = useState<Category | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -25,6 +34,22 @@ export default function POS({ products, onCheckout }: POSProps) {
   const [customerName, setCustomerName] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [cashAmount, setCashAmount] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Backfill / Manual Recovered States
+  const [isBackfill, setIsBackfill] = useState(false);
+  const [backfillDate, setBackfillDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [backfillTime, setBackfillTime] = useState(() => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  });
+  const [backfillReason, setBackfillReason] = useState('');
+  const [adjustStock, setAdjustStock] = useState(true);
+  const [backfillPaymentStatus, setBackfillPaymentStatus] = useState<'Belum Bayar' | 'Lunas'>('Lunas');
+  
+  // Notes and Discount Custom Inputs
+  const [notes, setNotes] = useState('');
+  const [discount, setDiscount] = useState<string>('');
   
   // Modals for payment
   const [showQRISModal, setShowQRISModal] = useState(false);
@@ -51,11 +76,14 @@ export default function POS({ products, onCheckout }: POSProps) {
   }, [cart]);
 
   const tax = 0;
-  const discountAmount = 0;
+  
+  const discountAmount = useMemo(() => {
+    return Math.max(0, parseFloat(discount) || 0);
+  }, [discount]);
 
   const total = useMemo(() => {
-    return subtotal;
-  }, [subtotal]);
+    return Math.max(0, subtotal - discountAmount);
+  }, [subtotal, discountAmount]);
 
   // Quick fill cache suggestions based on grand total
   const cashSuggestions = useMemo(() => {
@@ -96,6 +124,8 @@ export default function POS({ products, onCheckout }: POSProps) {
   const handleAddToCart = (product: Product) => {
     if (!product.isAvailable) return;
 
+    console.log(`[USER EVENT: SELECT MENU] Product "${product.name}" (ID: ${product.id}) added to cart.`);
+
     setCart(prevCart => {
       const existing = prevCart.find(item => item.product.id === product.id);
       if (existing) {
@@ -113,6 +143,7 @@ export default function POS({ products, onCheckout }: POSProps) {
   };
 
   const handleUpdateQty = (productId: string, delta: number) => {
+    console.log(`[USER EVENT: MODIFY QUANTITY] Product ID: ${productId}, Delta: ${delta}`);
     setCart(prevCart => {
       return prevCart.map(item => {
         if (item.product.id === productId) {
@@ -125,13 +156,19 @@ export default function POS({ products, onCheckout }: POSProps) {
   };
 
   const handleRemoveFromCart = (productId: string) => {
+    console.log(`[USER EVENT: REMOVE MENU] Product ID: ${productId} removed from cart.`);
     setCart(prevCart => prevCart.filter(item => item.product.id !== productId));
   };
 
   const handleClearCart = () => {
+    console.log(`[UI CONTROL] Clearing active cart and customer form.`);
     setCart([]);
     setCustomerName('');
     setCashAmount('');
+    setDiscount('');
+    setNotes('');
+    setIsBackfill(false);
+    setBackfillReason('');
     setIsMobileCartOpen(false);
   };
 
@@ -141,12 +178,27 @@ export default function POS({ products, onCheckout }: POSProps) {
   };
 
   const isCheckoutDisabled = useMemo(() => {
-    return cart.length === 0 || !customerName.trim();
-  }, [cart, customerName]);
+    return cart.length === 0 || !customerName.trim() || isSubmitting;
+  }, [cart, customerName, isSubmitting]);
 
   // Process checkout transaction
-  const handleProcessCheckout = () => {
-    if (isCheckoutDisabled) return;
+  const handleProcessCheckout = async () => {
+    console.log(`[STAGE 1: CLICK TRIGGER] "Buat Pesanan & Kirim" clicked. isSubmitting: ${isSubmitting}`);
+    
+    if (isCheckoutDisabled) {
+      console.warn(`[STAGE 1: VALIDATION FAILURE] Checkout aborted. Cart empty, missing name, or currently submitting.`, {
+        cartLength: cart.length,
+        customerName: customerName,
+        isSubmitting
+      });
+      return;
+    }
+
+    console.log(`[STAGE 2: VALIDATION SUCCESS] Cart & Customer Name validated. Formulating transaction payload...`, {
+      customerName: customerName.trim(),
+      items: cart.map(i => `${i.product.name} (x${i.quantity})`),
+      totalPrice: total
+    });
 
     const itemsToCheckout = cart.map(item => ({
       productId: item.product.id,
@@ -164,7 +216,7 @@ export default function POS({ products, onCheckout }: POSProps) {
       ? changeValue
       : 0;
 
-    onCheckout({
+    const payload = {
       items: itemsToCheckout,
       subtotal,
       tax,
@@ -174,17 +226,36 @@ export default function POS({ products, onCheckout }: POSProps) {
       amountPaid: finalAmountPaid,
       changeAmount: finalChange,
       customerName: customerName.trim(),
-    });
+      notes: notes.trim() || undefined,
+      paymentStatus: isBackfill ? backfillPaymentStatus : 'Belum Bayar',
+      isBackfill,
+      backfillDate: isBackfill ? backfillDate : undefined,
+      backfillTime: isBackfill ? backfillTime : undefined,
+      backfilledBy: isBackfill ? userRole : undefined,
+      backfillReason: isBackfill ? (backfillReason.trim() || 'No reason provided') : undefined,
+      adjustStock: isBackfill ? adjustStock : undefined,
+    };
 
-    // Reset everything!
-    handleClearCart();
+    console.log(`[STAGE 3: DISPATCH TO SERVER] Handing transaction payload to App.tsx onCheckout...`, payload);
+    
+    setIsSubmitting(true);
+    try {
+      await onCheckout(payload);
+      console.log(`[STAGE 3: DISPATCH SUCCESS] App onCheckout completed.`);
+      handleClearCart();
+    } catch (err) {
+      console.error(`[STAGE 3: DISPATCH FAILED] App onCheckout threw an error:`, err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Quick manual checkout if QRIS succeeds
-  const handleQRISSucceed = () => {
+  const handleQRISSucceed = async () => {
+    console.log(`[STAGE 1: QRIS SUCESS TRIGGER] QRIS modal reported success. Triggering direct checkout...`);
     setPaymentMethod('QRIS');
     setShowQRISModal(false);
-    // Proceed directly:
+    
     const itemsToCheckout = cart.map(item => ({
       productId: item.product.id,
       name: item.product.name,
@@ -193,19 +264,30 @@ export default function POS({ products, onCheckout }: POSProps) {
       category: item.product.category,
     }));
 
-    onCheckout({
+    const payload = {
       items: itemsToCheckout,
       subtotal,
       tax,
       discount: discountAmount,
       total,
-      paymentMethod: 'QRIS',
+      paymentMethod: 'QRIS' as const,
       amountPaid: total,
       changeAmount: 0,
       customerName: customerName.trim(),
-    });
+    };
 
-    handleClearCart();
+    console.log(`[STAGE 3: DISPATCH TO SERVER] Handing QRIS transaction payload to App.tsx onCheckout...`, payload);
+
+    setIsSubmitting(true);
+    try {
+      await onCheckout(payload);
+      console.log(`[STAGE 3: DISPATCH SUCCESS] App onCheckout (QRIS) completed.`);
+      handleClearCart();
+    } catch (err) {
+      console.error(`[STAGE 3: DISPATCH FAILED] App onCheckout (QRIS) failed:`, err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Build simple category labels
@@ -258,6 +340,126 @@ export default function POS({ products, onCheckout }: POSProps) {
           {cart.length > 0 && !customerName.trim() && (
             <div className="text-[10px] text-amber-600 font-semibold flex items-center gap-1.5 mt-0.5 animate-pulse bg-amber-50 px-2 py-1 rounded-lg border border-amber-100/50">
               ⚠️ Nama pelanggan wajib diisi sebelum memesan!
+            </div>
+          )}
+
+          {/* User is Admin or Owner and has access to Backfill */}
+          {(userRole === 'ADMIN' || userRole === 'OWNER') && (
+            <div className="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200/40 space-y-2 mt-1.5 text-left">
+              <label className="flex items-center gap-2 cursor-pointer text-stone-700 font-bold text-[10.5px] select-none">
+                <input
+                  type="checkbox"
+                  checked={isBackfill}
+                  onChange={(e) => setIsBackfill(e.target.checked)}
+                  className="rounded border-amber-300 text-amber-600 focus:ring-amber-400 w-3.5 h-3.5 cursor-pointer"
+                />
+                <span>Input Pesanan Tanggal Sebelumnya (Backfill)</span>
+              </label>
+
+              {isBackfill && (
+                <div className="space-y-2 border-t border-amber-100/60 pt-2 animate-in slide-in-from-top duration-200">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-0.5">
+                      <label className="text-[9px] text-amber-800 font-bold uppercase">Tanggal</label>
+                      <input
+                        type="date"
+                        max={new Date().toISOString().split('T')[0]}
+                        value={backfillDate}
+                        onChange={(e) => setBackfillDate(e.target.value)}
+                        className="w-full px-2 py-1 border border-amber-200 rounded-lg text-stone-700 font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
+                      />
+                    </div>
+                    <div className="space-y-0.5">
+                      <label className="text-[9px] text-amber-800 font-bold uppercase">Jam</label>
+                      <input
+                        type="time"
+                        value={backfillTime}
+                        onChange={(e) => setBackfillTime(e.target.value)}
+                        className="w-full px-2 py-1 border border-amber-200 rounded-lg text-stone-700 font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <label className="text-[9px] text-amber-800 font-bold uppercase">Alasan Input Manual</label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: Rekap mati lampu / pesanan offline"
+                      value={backfillReason}
+                      onChange={(e) => setBackfillReason(e.target.value)}
+                      className="w-full px-2 py-1 border border-amber-200 rounded-lg text-stone-700 text-[11px] focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-0.5">
+                      <label className="text-[9px] text-amber-800 font-bold uppercase">Metode Bayar</label>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMethod('CASH')}
+                          className={`flex-1 py-1 px-1 rounded-lg border text-[10px] font-bold transition flex items-center justify-center gap-1 ${
+                            paymentMethod === 'CASH'
+                              ? 'bg-amber-600 text-white border-amber-600'
+                              : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                          }`}
+                        >
+                          CASH
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMethod('QRIS')}
+                          className={`flex-1 py-1 px-1 rounded-lg border text-[10px] font-bold transition flex items-center justify-center gap-1 ${
+                            paymentMethod === 'QRIS'
+                              ? 'bg-amber-600 text-white border-amber-600'
+                              : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                          }`}
+                        >
+                          QRIS
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-0.5">
+                      <label className="text-[9px] text-amber-800 font-bold uppercase">Status Transaksi</label>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setBackfillPaymentStatus('Lunas')}
+                          className={`flex-1 py-1 px-1 rounded-lg border text-[10px] font-bold transition flex items-center justify-center gap-1 ${
+                            backfillPaymentStatus === 'Lunas'
+                              ? 'bg-emerald-600 text-white border-emerald-600'
+                              : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                          }`}
+                        >
+                          Lunas
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBackfillPaymentStatus('Belum Bayar')}
+                          className={`flex-1 py-1 px-1 rounded-lg border text-[10px] font-bold transition flex items-center justify-center gap-1 ${
+                            backfillPaymentStatus === 'Belum Bayar'
+                              ? 'bg-[#3C2A21] text-white border-[#3C2A21]'
+                              : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                          }`}
+                        >
+                          Belum
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-stone-600 font-bold text-[9.5px] select-none mt-1">
+                    <input
+                      type="checkbox"
+                      checked={adjustStock}
+                      onChange={(e) => setAdjustStock(e.target.checked)}
+                      className="rounded border-stone-300 text-[#3C2A21] focus:ring-[#3C2A21] w-3 h-3 cursor-pointer"
+                    />
+                    <span>Sesuaikan Stok Barang</span>
+                  </label>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -320,11 +522,42 @@ export default function POS({ products, onCheckout }: POSProps) {
 
       {/* Calculations Drawer panel */}
       <div className="bg-[#F5F2ED] border-t border-black/5 p-5 space-y-4 flex-shrink-0">
+        {/* Notes and Discount Inputs */}
+        <div className="grid grid-cols-2 gap-2 pb-2 border-b border-dashed border-stone-300">
+          <div className="space-y-0.5">
+            <label className="text-[9px] text-stone-500 font-bold uppercase">Diskon (Rp)</label>
+            <input
+              type="number"
+              placeholder="0"
+              value={discount}
+              onChange={(e) => setDiscount(e.target.value)}
+              className="w-full px-2 py-1 border border-stone-200 rounded-lg text-stone-700 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-[#D4A373] bg-white"
+            />
+          </div>
+          <div className="space-y-0.5">
+            <label className="text-[9px] text-stone-500 font-bold uppercase">Catatan Pesanan</label>
+            <input
+              type="text"
+              placeholder="Contoh: No Sugar / Less Ice"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full px-2 py-1 border border-stone-200 rounded-lg text-stone-700 text-[11px] focus:outline-none focus:ring-1 focus:ring-[#D4A373] bg-white"
+            />
+          </div>
+        </div>
+
         <div className="space-y-1.5 text-xs">
           <div className="flex justify-between text-stone-600">
             <span>Subtotal:</span>
             <span className="font-mono">{formatIDR(subtotal)}</span>
           </div>
+
+          {discountAmount > 0 && (
+            <div className="flex justify-between text-rose-600 font-semibold">
+              <span>Potongan Diskon:</span>
+              <span className="font-mono">-{formatIDR(discountAmount)}</span>
+            </div>
+          )}
 
           <div className="flex justify-between text-sm font-bold text-[#3C2A21] border-t border-dashed border-stone-300 pt-2.5 leading-none mt-2.5">
             <span>TOTAL TAGIHAN:</span>

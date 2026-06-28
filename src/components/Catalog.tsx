@@ -25,6 +25,7 @@ export default function Catalog({ products, onAddProduct, onEditProduct, onDelet
   const [formDescription, setFormDescription] = useState('');
   const [formImage, setFormImage] = useState('');
   const [formIsAvailable, setFormIsAvailable] = useState(true);
+  const [formStock, setFormStock] = useState<string>('');
 
   // Error messages state
   const [formError, setFormError] = useState('');
@@ -67,6 +68,7 @@ export default function Catalog({ products, onAddProduct, onEditProduct, onDelet
     setFormDescription('');
     setFormImage(SUGGESTED_IMAGES[0].url); // pre-select latte
     setFormIsAvailable(true);
+    setFormStock('');
     setFormError('');
     setShowFormModal(true);
   };
@@ -77,9 +79,10 @@ export default function Catalog({ products, onAddProduct, onEditProduct, onDelet
     setFormName(product.name);
     setFormCategory(product.category);
     setFormPrice(product.price.toString());
-    setFormDescription(product.description);
-    setFormImage(product.image);
+    setFormDescription(product.description || '');
+    setFormImage(product.image || '');
     setFormIsAvailable(product.isAvailable);
+    setFormStock(product.stock !== undefined ? product.stock.toString() : '');
     setFormError('');
     setShowFormModal(true);
   };
@@ -98,6 +101,12 @@ export default function Catalog({ products, onAddProduct, onEditProduct, onDelet
       return;
     }
 
+    const stockNum = formStock.trim() !== '' ? parseInt(formStock, 10) : undefined;
+    if (stockNum !== undefined && (isNaN(stockNum) || stockNum < 0)) {
+      setFormError('Stok barang wajib diisi dengan angka non-negatif.');
+      return;
+    }
+
     const productPayload = {
       name: formName.trim(),
       category: formCategory,
@@ -105,6 +114,7 @@ export default function Catalog({ products, onAddProduct, onEditProduct, onDelet
       description: '',
       image: '',
       isAvailable: formIsAvailable,
+      stock: stockNum,
     };
 
     if (editingProduct) {
@@ -216,6 +226,12 @@ export default function Catalog({ products, onAddProduct, onEditProduct, onDelet
                 </div>
 
                 <h4 className="text-sm font-bold text-stone-800 tracking-tight leading-tight">{p.name}</h4>
+                <div className="flex justify-between items-center text-[10px] text-stone-500 font-mono mt-1 pt-0.5">
+                  <span>Stok:</span>
+                  <span className={`font-bold ${p.stock !== undefined && p.stock <= 5 ? 'text-rose-500 font-extrabold animate-pulse' : 'text-[#3C2A21]'}`}>
+                    {p.stock !== undefined ? `${p.stock} pcs` : 'Tidak Terbatas'}
+                  </span>
+                </div>
               </div>
 
               <div className="flex justify-between items-center pt-3 mt-4 border-t border-stone-100">
@@ -308,13 +324,25 @@ export default function Catalog({ products, onAddProduct, onEditProduct, onDelet
                   <select
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value as Category)}
-                    className="w-full px-3 py-2 border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#D4A373] bg-white text-xs"
+                    className="w-full px-3 py-2 border border-[#E5E5E5] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#D4A373] bg-white text-xs"
                   >
                     <option value="KOPI">☕ Kopi (Espresso Base / Signature)</option>
                     <option value="NON_KOPI">🍹 Non-Kopi &amp; Fresh Milk Tea</option>
                     <option value="MAKANAN">🍳 Makanan Utama (Nasi/Pasta/Sandwich)</option>
                     <option value="CEMILAN">🍰 Roti &amp; Kentang Goreng</option>
                   </select>
+                </div>
+
+                {/* Stok Barang */}
+                <div className="space-y-1">
+                  <label className="text-[11px] text-[#3C2A21] font-bold uppercase">Stok Barang (Kosongkan jika tak terbatas)</label>
+                  <input
+                    type="number"
+                    placeholder="Contoh: 50"
+                    value={formStock}
+                    onChange={(e) => setFormStock(e.target.value)}
+                    className="w-full px-3 py-2 border border-stone-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#D4A373] text-xs font-mono bg-white"
+                  />
                 </div>
 
                 {/* Status Toggle option */}

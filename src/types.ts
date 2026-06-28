@@ -8,6 +8,7 @@ export interface Product {
   description: string;
   image: string;
   isAvailable: boolean;
+  stock?: number;
 }
 
 export interface CartItem {
@@ -42,6 +43,15 @@ export interface Transaction {
   nominal_pembayaran?: number;
   nominal_kembalian?: number;
   waktu_pembayaran?: string;
+
+  // Backfill properties
+  isBackfill?: boolean;
+  created_at?: string; // Actual real-time of manual input
+  transaction_date?: string; // Target backfill transaction date (matches timestamp)
+  backfilledBy?: string; // Admin / Owner who inputted this
+  backfillReason?: string; // Reason for backfill
+  adjustStock?: boolean; // Whether stock was adjusted
+  stockAdjusted?: boolean; // Track if the stock has been deducted to avoid double deduction
 }
 
 export interface DayReport {

@@ -134,10 +134,15 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
     transactions.forEach(t => {
       if (t.paymentStatus === 'Belum Bayar' || t.paymentStatus === 'Belum Dibayar') return;
 
-      const tDate = new Date(t.timestamp);
-      const isMatched = tDate.getFullYear() === target.getFullYear() &&
-                        tDate.getMonth() === target.getMonth() &&
-                        tDate.getDate() === target.getDate();
+      const txDateStr = t.transaction_date || t.timestamp.split('T')[0];
+      
+      // format target as YYYY-MM-DD
+      const targetYear = target.getFullYear();
+      const targetMonth = String(target.getMonth() + 1).padStart(2, '0');
+      const targetDay = String(target.getDate()).padStart(2, '0');
+      const targetDateStr = `${targetYear}-${targetMonth}-${targetDay}`;
+      
+      const isMatched = txDateStr === targetDateStr;
 
       if (isMatched) {
         totalOmzet += t.total;
