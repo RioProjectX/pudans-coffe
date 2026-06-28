@@ -55,6 +55,10 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
   const [showQRISModal, setShowQRISModal] = useState(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
 
+  // Toast / Feedback States
+  const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
   // Formats
   const formatIDR = (num: number) => {
     return 'Rp ' + num.toLocaleString('id-ID');
@@ -122,7 +126,7 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
 
   // Cart actions
   const handleAddToCart = (product: Product) => {
-    if (!product.isAvailable) return;
+    if (product.isAvailable === false) return;
 
     console.log(`[USER EVENT: SELECT MENU] Product "${product.name}" (ID: ${product.id}) added to cart.`);
 
@@ -185,14 +189,26 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
   const handleProcessCheckout = async () => {
     console.log(`[STAGE 1: CLICK TRIGGER] "Buat Pesanan & Kirim" clicked. isSubmitting: ${isSubmitting}`);
     
-    if (isCheckoutDisabled) {
-      console.warn(`[STAGE 1: VALIDATION FAILURE] Checkout aborted. Cart empty, missing name, or currently submitting.`, {
-        cartLength: cart.length,
-        customerName: customerName,
-        isSubmitting
-      });
+    if (cart.length === 0) {
+      setValidationError("Keranjang belanja masih kosong! Silakan pilih menu terlebih dahulu.");
+      setTimeout(() => setValidationError(null), 4000);
       return;
     }
+
+    if (!customerName.trim()) {
+      setValidationError("Nama Pelanggan wajib diisi untuk membuat pesanan!");
+      // Automatically focus on customer name input field
+      const nameInput = document.querySelector('input[placeholder="Nama Pelanggan (Wajib)"]');
+      if (nameInput) {
+        (nameInput as HTMLInputElement).focus();
+      }
+      setTimeout(() => setValidationError(null), 4000);
+      return;
+    }
+
+    if (isSubmitting) return;
+
+    setValidationError(null);
 
     console.log(`[STAGE 2: VALIDATION SUCCESS] Cart & Customer Name validated. Formulating transaction payload...`, {
       customerName: customerName.trim(),
@@ -242,9 +258,13 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
     try {
       await onCheckout(payload);
       console.log(`[STAGE 3: DISPATCH SUCCESS] App onCheckout completed.`);
+      setSuccessToast(`Pesanan untuk "${customerName.trim()}" berhasil dibuat & dikirim ke antrean!`);
       handleClearCart();
+      setTimeout(() => setSuccessToast(null), 5000);
     } catch (err) {
       console.error(`[STAGE 3: DISPATCH FAILED] App onCheckout threw an error:`, err);
+      setValidationError("Gagal menyimpan pesanan ke database. Silakan coba lagi.");
+      setTimeout(() => setValidationError(null), 5000);
     } finally {
       setIsSubmitting(false);
     }
@@ -253,6 +273,13 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
   // Quick manual checkout if QRIS succeeds
   const handleQRISSucceed = async () => {
     console.log(`[STAGE 1: QRIS SUCESS TRIGGER] QRIS modal reported success. Triggering direct checkout...`);
+    
+    if (!customerName.trim()) {
+      setValidationError("Nama Pelanggan wajib diisi untuk pembayaran QRIS!");
+      setTimeout(() => setValidationError(null), 4000);
+      return;
+    }
+
     setPaymentMethod('QRIS');
     setShowQRISModal(false);
     
@@ -282,9 +309,13 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
     try {
       await onCheckout(payload);
       console.log(`[STAGE 3: DISPATCH SUCCESS] App onCheckout (QRIS) completed.`);
+      setSuccessToast(`Pesanan QRIS untuk "${customerName.trim()}" berhasil dibuat!`);
       handleClearCart();
+      setTimeout(() => setSuccessToast(null), 5000);
     } catch (err) {
       console.error(`[STAGE 3: DISPATCH FAILED] App onCheckout (QRIS) failed:`, err);
+      setValidationError("Gagal menyimpan transaksi QRIS ke database.");
+      setTimeout(() => setValidationError(null), 5000);
     } finally {
       setIsSubmitting(false);
     }
@@ -653,7 +684,7 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
                     id={`pos-prod-${p.id}`}
                     onClick={() => handleAddToCart(p)}
                     className={`group bg-white rounded-2xl border transition-all duration-200 flex flex-col justify-between overflow-hidden relative cursor-pointer p-3.5
-                      ${p.isAvailable 
+                      ${p.isAvailable !== false 
                         ? 'border-stone-150 hover:border-[#D4A373] hover:shadow-md' 
                         : 'border-dashed border-stone-250 opacity-60 pointer-events-none bg-stone-50'
                       }
@@ -676,7 +707,7 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
                           )}
 
                           {/* Status Badge */}
-                          {!p.isAvailable && (
+                          {p.isAvailable === false && (
                             <span className="bg-stone-950 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wide">
                               Habis
                             </span>
@@ -694,7 +725,7 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
                       <span className="text-xs sm:text-sm font-black font-mono text-[#3C2A21]">
                         {formatIDR(p.price)}
                       </span>
-                      {p.isAvailable && (
+                      {p.isAvailable !== false && (
                         <span className="w-6 h-6 rounded-lg bg-stone-50 group-hover:bg-[#D4A373]/10 text-stone-400 group-hover:text-[#D4A373] flex items-center justify-center transition border border-stone-100">
                           <Plus size={14} />
                         </span>
@@ -771,6 +802,24 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
               {renderCartContent(true)}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notifications */}
+      {(successToast || validationError) && (
+        <div className="fixed top-20 right-4 z-50 max-w-sm w-full space-y-2 pointer-events-auto animate-in fade-in slide-in-from-top duration-300">
+          {successToast && (
+            <div className="bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 border border-emerald-500/30 animate-bounce">
+              <CheckCircle2 size={18} className="text-emerald-100 flex-shrink-0" />
+              <div className="text-xs font-bold leading-tight flex-1">{successToast}</div>
+            </div>
+          )}
+          {validationError && (
+            <div className="bg-rose-600 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 border border-rose-500/30">
+              <div className="bg-white/20 p-1 rounded-lg text-rose-100 flex-shrink-0 font-bold">⚠️</div>
+              <div className="text-xs font-bold leading-tight flex-1">{validationError}</div>
+            </div>
+          )}
         </div>
       )}
 

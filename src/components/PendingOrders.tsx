@@ -25,6 +25,29 @@ interface PendingOrdersProps {
   ) => Promise<any>;
 }
 
+function sanitizeFirestoreData<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return null as unknown as T;
+  }
+  if (data instanceof Date) {
+    return data as unknown as T;
+  }
+  if (Array.isArray(data)) {
+    return data.map(item => sanitizeFirestoreData(item)) as unknown as T;
+  }
+  if (typeof data === 'object') {
+    const clean: any = {};
+    for (const key of Object.keys(data as any)) {
+      const val = (data as any)[key];
+      if (val !== undefined) {
+        clean[key] = sanitizeFirestoreData(val);
+      }
+    }
+    return clean as T;
+  }
+  return data;
+}
+
 export default function PendingOrders({ transactions, products, onConfirmPayment, onUpdateTransactionItems }: PendingOrdersProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [txToConfirm, setTxToConfirm] = useState<Transaction | null>(null);
@@ -140,7 +163,7 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
         changeAmount: 0
       };
       
-      await setDoc(doc(db, 'transactions', splitInvoiceId), splitTx);
+      await setDoc(doc(db, 'transactions', splitInvoiceId), sanitizeFirestoreData(splitTx));
       
       let updatedOrgName = txToSplit.customerName;
       if (txToSplit.customerName && txToSplit.customerName.includes('Gabungan (')) {
@@ -164,7 +187,7 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
         total: remainingTotal
       };
       
-      await setDoc(doc(db, 'transactions', txToSplit.id), updatedOriginalTx);
+      await setDoc(doc(db, 'transactions', txToSplit.id), sanitizeFirestoreData(updatedOriginalTx));
       
       setSuccessToast(`Pesanan berhasil dipisahkan! Transaksi baru ${splitInvoiceId} telah dibuat.`);
       setTimeout(() => setSuccessToast(null), 4000);
@@ -333,7 +356,7 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
       };
 
       // Push raw combined base doc first
-      await setDoc(doc(db, 'transactions', combinedInvoiceId), combinedBaseTx);
+      await setDoc(doc(db, 'transactions', combinedInvoiceId), sanitizeFirestoreData(combinedBaseTx));
 
       // 2. Clear or update original pending source transactions
       for (const [txId, prodQuantities] of Object.entries(combineSelections)) {
@@ -1024,7 +1047,7 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
                           </span>
                           <h5 className="font-serif text-xs font-bold text-stone-800 leading-tight">{p.name}</h5>
                           <p className="text-[10px] text-stone-450 font-mono font-bold">{formatIDR(p.price)}</p>
-                          {!p.isAvailable && (
+                          {p.isAvailable === false && (
                             <span className="text-[9px] font-bold text-rose-500 block">Habis / Tidak Tersedia</span>
                           )}
                         </div>
@@ -1054,7 +1077,7 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
                               <span className="font-mono font-bold text-xs min-w-4 text-center">{currentQty}</span>
                               <button
                                 type="button"
-                                disabled={!p.isAvailable}
+                                disabled={p.isAvailable === false}
                                 onClick={() => {
                                   setAddItemsGrid(prev => ({
                                     ...prev,
@@ -1069,7 +1092,7 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
                           ) : (
                             <button
                               type="button"
-                              disabled={!p.isAvailable}
+                              disabled={p.isAvailable === false}
                               onClick={() => {
                                 setAddItemsGrid(prev => ({
                                   ...prev,

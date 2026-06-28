@@ -63,7 +63,8 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
 
     transactions.forEach(t => {
       if (t.paymentStatus === 'Belum Bayar' || t.paymentStatus === 'Belum Dibayar') return;
-      const tDate = new Date(t.timestamp);
+      const txDateStr = t.transaction_date || t.timestamp.split('T')[0];
+      const tDate = new Date(txDateStr + 'T12:00:00');
       const val = t.total;
 
       if (tDate >= startOfToday) {
@@ -211,7 +212,7 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
     // Populate buckets
     transactions.forEach(t => {
       if (t.paymentStatus === 'Belum Bayar' || t.paymentStatus === 'Belum Dibayar') return;
-      const tKey = t.timestamp.split('T')[0];
+      const tKey = t.transaction_date || t.timestamp.split('T')[0];
       const match = days.find(d => d.dateKey === tKey);
       if (match) {
         match.revenue += t.total;

@@ -44,6 +44,29 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
+function sanitizeFirestoreData<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return null as unknown as T;
+  }
+  if (data instanceof Date) {
+    return data as unknown as T;
+  }
+  if (Array.isArray(data)) {
+    return data.map(item => sanitizeFirestoreData(item)) as unknown as T;
+  }
+  if (typeof data === 'object') {
+    const clean: any = {};
+    for (const key of Object.keys(data as any)) {
+      const val = (data as any)[key];
+      if (val !== undefined) {
+        clean[key] = sanitizeFirestoreData(val);
+      }
+    }
+    return clean as T;
+  }
+  return data;
+}
+
 export default function App() {
   // Navigation
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'POS' | 'PENDING' | 'CATALOG' | 'HISTORY'>('DASHBOARD');
@@ -166,7 +189,7 @@ export default function App() {
         total: newTotal,
       };
 
-      await setDoc(doc(db, 'transactions', txId), updatedTx);
+      await setDoc(doc(db, 'transactions', txId), sanitizeFirestoreData(updatedTx));
     } catch (error) {
       console.error('Error updating transaction items in Firestore:', error);
       throw error;
@@ -177,10 +200,10 @@ export default function App() {
   const handleAddProduct = async (newProd: Omit<Product, 'id'>) => {
     const freshProdId = 'prod-' + Date.now();
     try {
-      await setDoc(doc(db, 'products', freshProdId), {
+      await setDoc(doc(db, 'products', freshProdId), sanitizeFirestoreData({
         ...newProd,
         isAvailable: newProd.isAvailable ?? true
-      });
+      }));
     } catch (error) {
       console.error('Error adding product to Firestore:', error);
     }
@@ -188,7 +211,7 @@ export default function App() {
 
   const handleEditProduct = async (id: string, updated: Partial<Product>) => {
     try {
-      await setDoc(doc(db, 'products', id), updated, { merge: true });
+      await setDoc(doc(db, 'products', id), sanitizeFirestoreData(updated), { merge: true });
     } catch (error) {
       console.error('Error updating product to Firestore:', error);
     }
@@ -211,7 +234,7 @@ export default function App() {
         const prodData = snap.data();
         if (prodData && prodData.stock !== undefined) {
           const newStock = Math.max(0, prodData.stock - quantityToDeduct);
-          await setDoc(prodRef, { stock: newStock }, { merge: true });
+          await setDoc(prodRef, sanitizeFirestoreData({ stock: newStock }), { merge: true });
           console.log(`[STOCK ADJUST] Deducted stock for ${productId} by ${quantityToDeduct}. New stock: ${newStock}`);
         }
       }
@@ -325,7 +348,7 @@ export default function App() {
     console.log(`[STAGE 6: DATABASE SAVE] Writing transaction document to Firestore. ID: ${invoiceId}`, freshTx);
 
     try {
-      await setDoc(doc(db, 'transactions', invoiceId), freshTx);
+      await setDoc(doc(db, 'transactions', invoiceId), sanitizeFirestoreData(freshTx));
       console.log(`[STAGE 7: DATABASE RESPONSE SUCCESS] Document ${invoiceId} successfully written to Firestore.`);
     } catch (error) {
       console.error(`[STAGE 7: DATABASE RESPONSE ERROR] Failed to write ${invoiceId} to Firestore:`, error);
@@ -358,7 +381,7 @@ export default function App() {
         lunasTx.stockAdjusted = true;
       }
 
-      await setDoc(doc(db, 'transactions', txId), lunasTx);
+      await setDoc(doc(db, 'transactions', txId), sanitizeFirestoreData(lunasTx));
       setActiveReceipt(lunasTx);
       return lunasTx;
     } catch (error) {
@@ -380,7 +403,7 @@ export default function App() {
         changeAmount: 0,
       };
 
-      await setDoc(doc(db, 'transactions', txId), unpaidTx);
+      await setDoc(doc(db, 'transactions', txId), sanitizeFirestoreData(unpaidTx));
     } catch (error) {
       console.error('Error reverting transaction to unpaid status in Firestore:', error);
       throw error;

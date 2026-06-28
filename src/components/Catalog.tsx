@@ -81,7 +81,7 @@ export default function Catalog({ products, onAddProduct, onEditProduct, onDelet
     setFormPrice(product.price.toString());
     setFormDescription(product.description || '');
     setFormImage(product.image || '');
-    setFormIsAvailable(product.isAvailable);
+    setFormIsAvailable(product.isAvailable !== false);
     setFormStock(product.stock !== undefined ? product.stock.toString() : '');
     setFormError('');
     setShowFormModal(true);
@@ -203,7 +203,7 @@ export default function Catalog({ products, onAddProduct, onEditProduct, onDelet
             <div 
               key={p.id}
               className={`bg-white rounded-2xl border border-black/5 overflow-hidden shadow-sm flex flex-col justify-between transition-all duration-300 hover:shadow-md hover:border-[#D4A373] p-4
-                ${!p.isAvailable ? 'border-dashed opacity-75 bg-stone-50' : ''}
+                ${p.isAvailable === false ? 'border-dashed opacity-75 bg-stone-50' : ''}
               `}
             >
               {/* Product Info */}
@@ -216,12 +216,12 @@ export default function Catalog({ products, onAddProduct, onEditProduct, onDelet
                   
                   {/* Available Status Pill Indicator */}
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wide
-                    ${p.isAvailable 
+                    ${p.isAvailable !== false 
                       ? 'bg-emerald-50 text-emerald-800' 
                       : 'bg-rose-50 text-rose-800'
                     }`}
                   >
-                    {p.isAvailable ? 'Tersedia' : 'Habis'}
+                    {p.isAvailable !== false ? 'Tersedia' : 'Habis'}
                   </span>
                 </div>
 
