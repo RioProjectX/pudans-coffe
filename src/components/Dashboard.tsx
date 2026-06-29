@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Transaction, Product } from '../types';
 import { TrendingUp, DollarSign, ShoppingBag, Award, Clock, ArrowUpRight, ArrowDownRight, Coffee, Utensils, Sparkles, AlertCircle, Trash2, RotateCcw, Calendar, Users, Trophy, Crown } from 'lucide-react';
 
@@ -10,8 +10,10 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ transactions, products, onNavigateToPOS, onClearAllTransactions }: DashboardProps) {
-  const [hoveredPoint, setHoveredPoint] = useState<{ day: string; value: number; x: number; y: number } | null>(null);
+  const [hoveredPoint, setHoveredPoint] = useState<{ dateKey: string; day: string; value: number; x: number; y: number } | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [chartPeriod, setChartPeriod] = useState<'7' | '30' | 'ALL'>('ALL');
+  const chartScrollRef = useRef<HTMLDivElement>(null);
   const [resetCode, setResetCode] = useState('');
   const [resetError, setResetError] = useState('');
 
@@ -190,13 +192,37 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
     };
   }, [transactions, filterPeriod, customFilterDate]);
 
-  // 3. Analytics Chart: Sales Trend (Last 7 Days)
+  // 3. Analytics Chart: Sales Trend (Dynamic range based on selected period)
   const chartData = useMemo(() => {
     const today = new Date();
     const days = [];
     
-    // Generate empty buckets for last 7 days
-    for (let i = 6; i >= 0; i--) {
+    let diffDays = 7;
+    if (chartPeriod === '30') {
+      diffDays = 30;
+    } else if (chartPeriod === 'ALL') {
+      let oldestDate = new Date();
+      oldestDate.setDate(today.getDate() - 14); // default 14 days fallback
+
+      if (transactions.length > 0) {
+        transactions.forEach(t => {
+          if (t.paymentStatus === 'Belum Bayar' || t.paymentStatus === 'Belum Dibayar') return;
+          const txDateStr = t.transaction_date || t.timestamp.split('T')[0];
+          const tDate = new Date(txDateStr + 'T12:00:00');
+          if (tDate < oldestDate) {
+            oldestDate = tDate;
+          }
+        });
+      }
+
+      const diffTime = Math.abs(today.getTime() - oldestDate.getTime());
+      diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays < 7) diffDays = 7;
+      if (diffDays > 365) diffDays = 365; // absolute cap of 1 year
+    }
+
+    // Generate daily buckets
+    for (let i = diffDays - 1; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
       const keyStr = d.toISOString().split('T')[0];
@@ -221,15 +247,23 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
     });
 
     return days;
-  }, [transactions]);
+  }, [transactions, chartPeriod]);
+
+  // Auto-scroll scrollable chart viewport to the end (latest date) on mount or range change
+  useEffect(() => {
+    if (chartScrollRef.current) {
+      chartScrollRef.current.scrollLeft = chartScrollRef.current.scrollWidth;
+    }
+  }, [chartData.length, chartPeriod]);
 
   // Calculate coordinates for SVG line map
   const svgChartNodes = useMemo(() => {
     const maxVal = Math.max(...chartData.map(d => d.revenue), 100000) * 1.15; // 15% padding top
-    const width = 600;
+    // Dynamic width! Each day gets around 50px space, with a minimum of 600px width.
+    const width = Math.max(600, chartData.length * 50);
     const height = 180;
     const paddingLeft = 60;
-    const paddingRight = 20;
+    const paddingRight = 30; // buffer to ensure last node is fully visible
     const paddingTop = 20;
     const paddingBottom = 30;
 
@@ -501,127 +535,185 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
         <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-black/5 shadow-sm">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
             <div>
-              <h3 className="font-serif text-lg font-bold text-stone-800">Tren Penjualan 7 Hari Terakhir</h3>
-              <p className="text-xs text-stone-400">Tampilan omzet harian yang diperbarui real-time</p>
+              <h3 className="font-serif text-lg font-bold text-stone-800">
+                {chartPeriod === '7' 
+                  ? 'Tren Penjualan 7 Hari Terakhir' 
+                  : chartPeriod === '30' 
+                    ? 'Tren Penjualan 30 Hari Terakhir' 
+                    : 'Tren Penjualan Seluruh Hari'}
+              </h3>
+              <p className="text-xs text-stone-400">
+                Tampilan omzet harian yang diperbarui real-time (bisa geser/scroll ke kiri-kanan)
+              </p>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="inline-block w-3 h-3 rounded-full bg-[#3C2A21]"></span>
-              <span className="text-xs text-stone-500 font-medium font-sans">Omzet Harian (IDR)</span>
+            
+            <div className="flex flex-col sm:flex-row gap-3 items-end sm:items-center w-full sm:w-auto">
+              {/* Period Selector Buttons */}
+              <div className="flex bg-[#F5F2ED] rounded-xl p-0.5 border border-black/5 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setChartPeriod('7')}
+                  className={`px-3 py-1 rounded-lg transition-all ${
+                    chartPeriod === '7'
+                      ? 'bg-white text-stone-950 shadow-xs font-bold'
+                      : 'text-stone-500 hover:text-stone-800'
+                  }`}
+                >
+                  7 Hari
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartPeriod('30')}
+                  className={`px-3 py-1 rounded-lg transition-all ${
+                    chartPeriod === '30'
+                      ? 'bg-white text-stone-950 shadow-xs font-bold'
+                      : 'text-stone-500 hover:text-stone-800'
+                  }`}
+                >
+                  30 Hari
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartPeriod('ALL')}
+                  className={`px-3 py-1 rounded-lg transition-all ${
+                    chartPeriod === 'ALL'
+                      ? 'bg-white text-stone-950 shadow-xs font-bold'
+                      : 'text-stone-500 hover:text-stone-800'
+                  }`}
+                >
+                  Semua Hari
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-3 h-3 rounded-full bg-[#3C2A21]"></span>
+                <span className="text-xs text-stone-500 font-medium font-sans">Omzet (IDR)</span>
+              </div>
             </div>
           </div>
 
-          {/* SVG Custom interactive Line Chart */}
-          <div className="relative w-full overflow-hidden mt-4">
-            <svg 
-              viewBox={`0 0 ${svgChartNodes.width} ${svgChartNodes.height}`} 
-              className="w-full h-auto select-none"
-            >
-              {/* Draw Grids and Y Axis metrics */}
-              {svgChartNodes.yGridValues.map((g, idx) => (
-                <g key={idx} className="opacity-40">
-                  <line 
-                    x1={svgChartNodes.paddingLeft} 
-                    y1={g.y} 
-                    x2={svgChartNodes.width - 20} 
-                    y2={g.y} 
-                    stroke="#EAE7E2" 
-                    strokeWidth="1" 
-                    strokeDasharray="4 4"
-                  />
-                  <text 
-                    x={svgChartNodes.paddingLeft - 8} 
-                    y={g.y + 4} 
-                    fontSize="10" 
-                    fontFamily="monospace" 
-                    textAnchor="end" 
-                    fill="#8E8D8A"
-                  >
-                    {g.val >= 1000 ? `${g.val / 1000}k` : g.val}
-                  </text>
-                </g>
-              ))}
-
-              {/* Shaded Area underneath */}
-              <defs>
-                <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#3C2A21" stopOpacity="0.30" />
-                  <stop offset="100%" stopColor="#3C2A21" stopOpacity="0.00" />
-                </linearGradient>
-              </defs>
-              <path 
-                d={svgChartNodes.areaD} 
-                fill="url(#chartGradient)" 
-              />
-
-              {/* Connected Line curve */}
-              <path 
-                d={svgChartNodes.pathD} 
-                fill="none" 
-                stroke="#3C2A21" 
-                strokeWidth="2.5" 
-                strokeLinecap="round"
-              />
-
-              {/* Intersections Circles */}
-              {svgChartNodes.points.map((p, idx) => {
-                const isHovered = hoveredPoint?.day === p.data.label;
-                return (
-                  <g key={idx}>
-                    <circle 
-                      cx={p.x} 
-                      cy={p.y} 
-                      r={isHovered ? 7 : 4} 
-                      fill={isHovered ? "#D4A373" : "#3C2A21"} 
-                      stroke="#FFFFFF" 
-                      strokeWidth="2"
-                      className="transition-all duration-150 cursor-pointer"
-                      onMouseEnter={(e) => {
-                        setHoveredPoint({
-                           day: p.data.label,
-                           value: p.data.revenue,
-                           x: p.x,
-                           y: p.y
-                        });
-                      }}
-                      onMouseLeave={() => setHoveredPoint(null)}
+          {/* SVG Custom interactive Line Chart with scroll container */}
+          <div 
+            ref={chartScrollRef}
+            className="relative w-full overflow-x-auto mt-4 scrollbar-thin scrollbar-thumb-stone-250 scrollbar-track-stone-50"
+          >
+            <div style={{ width: `${svgChartNodes.width}px` }} className="relative pb-2">
+              <svg 
+                viewBox={`0 0 ${svgChartNodes.width} ${svgChartNodes.height}`} 
+                className="w-full h-auto select-none"
+              >
+                {/* Draw Grids and Y Axis metrics */}
+                {svgChartNodes.yGridValues.map((g, idx) => (
+                  <g key={idx} className="opacity-40">
+                    <line 
+                      x1={svgChartNodes.paddingLeft} 
+                      y1={g.y} 
+                      x2={svgChartNodes.width - 20} 
+                      y2={g.y} 
+                      stroke="#EAE7E2" 
+                      strokeWidth="1" 
+                      strokeDasharray="4 4"
                     />
-                    {/* X Axis labels */}
                     <text 
-                      x={p.x} 
-                      y={svgChartNodes.height - 10} 
+                      x={svgChartNodes.paddingLeft - 8} 
+                      y={g.y + 4} 
                       fontSize="10" 
-                      fontWeight="500"
-                      fill="#78716C" 
-                      textAnchor="middle"
+                      fontFamily="monospace" 
+                      textAnchor="end" 
+                      fill="#8E8D8A"
                     >
-                      {p.data.label}
+                      {g.val >= 1000 ? `${g.val / 1000}k` : g.val}
                     </text>
                   </g>
-                );
-              })}
-            </svg>
+                ))}
 
-            {/* Custom overlay DOM Tooltip */}
-            {hoveredPoint && (
-              <div 
-                className="absolute bg-stone-900 text-white rounded-lg p-2 text-xs shadow-xl pointer-events-none z-20 border border-stone-800 transition-all duration-75"
-                style={{
-                  left: `${(hoveredPoint.x / svgChartNodes.width) * 100}%`,
-                  top: `${(hoveredPoint.y / svgChartNodes.height) * 100 - 25}%`,
-                  transform: 'translate(-50%, -100%)'
-                }}
-              >
-                <p className="font-semibold">{hoveredPoint.day}</p>
-                <p className="text-[#D4A373] font-mono">{formatIDR(hoveredPoint.value)}</p>
-              </div>
-            )}
+                {/* Shaded Area underneath */}
+                <defs>
+                  <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#3C2A21" stopOpacity="0.30" />
+                    <stop offset="100%" stopColor="#3C2A21" stopOpacity="0.00" />
+                  </linearGradient>
+                </defs>
+                <path 
+                  d={svgChartNodes.areaD} 
+                  fill="url(#chartGradient)" 
+                />
+
+                {/* Connected Line curve */}
+                <path 
+                  d={svgChartNodes.pathD} 
+                  fill="none" 
+                  stroke="#3C2A21" 
+                  strokeWidth="2.5" 
+                  strokeLinecap="round"
+                />
+
+                {/* Intersections Circles */}
+                {svgChartNodes.points.map((p, idx) => {
+                  const isHovered = hoveredPoint?.dateKey === p.data.dateKey;
+                  return (
+                    <g key={idx}>
+                      <circle 
+                        cx={p.x} 
+                        cy={p.y} 
+                        r={isHovered ? 7 : 4} 
+                        fill={isHovered ? "#D4A373" : "#3C2A21"} 
+                        stroke="#FFFFFF" 
+                        strokeWidth="2"
+                        className="transition-all duration-150 cursor-pointer"
+                        onMouseEnter={(e) => {
+                          setHoveredPoint({
+                             dateKey: p.data.dateKey,
+                             day: p.data.label,
+                             value: p.data.revenue,
+                             x: p.x,
+                             y: p.y
+                          });
+                        }}
+                        onMouseLeave={() => setHoveredPoint(null)}
+                      />
+                      {/* X Axis labels - conditional density */}
+                      <text 
+                        x={p.x} 
+                        y={svgChartNodes.height - 10} 
+                        fontSize="9" 
+                        fontWeight="600"
+                        fill="#78716C" 
+                        textAnchor="middle"
+                      >
+                        {chartData.length <= 10 
+                          ? p.data.label 
+                          : (idx % Math.ceil(chartData.length / 10) === 0 ? p.data.dateFull : '')}
+                      </text>
+                    </g>
+                  );
+                })}
+              </svg>
+
+              {/* Custom overlay DOM Tooltip */}
+              {hoveredPoint && (
+                <div 
+                  className="absolute bg-stone-900 text-white rounded-lg p-2 text-[10px] shadow-xl pointer-events-none z-20 border border-stone-800 transition-all duration-75 font-sans"
+                  style={{
+                    left: `${hoveredPoint.x}px`,
+                    top: `${hoveredPoint.y - 12}px`,
+                    transform: 'translate(-50%, -100%)'
+                  }}
+                >
+                  <p className="font-bold whitespace-nowrap">{hoveredPoint.day} ({hoveredPoint.dateKey})</p>
+                  <p className="text-[#D4A373] font-mono whitespace-nowrap font-bold mt-0.5">{formatIDR(hoveredPoint.value)}</p>
+                </div>
+              )}
+            </div>
           </div>
           
-          <div className="flex justify-around items-center bg-[#F5F2ED]/50 rounded-xl p-3 border border-black/5 mt-4 text-center">
+          {/* Scrollable daily totals strip */}
+          <div className="flex gap-4 overflow-x-auto py-2.5 px-3 bg-[#F5F2ED]/50 rounded-xl border border-black/5 mt-4 scrollbar-thin scrollbar-thumb-stone-250">
             {chartData.map((d, i) => (
-              <div key={i} className="space-y-1">
-                <span className="text-[10px] text-[#8E8D8A] font-medium uppercase font-sans">{d.label}</span>
-                <span className="block text-xs font-bold text-stone-800 font-mono">
+              <div key={i} className="space-y-0.5 min-w-[65px] text-center flex-shrink-0">
+                <span className="text-[9px] text-[#8E8D8A] font-bold uppercase font-sans block leading-none">{d.label}</span>
+                <span className="text-[8px] text-[#8E8D8A]/80 font-sans block leading-none">{d.dateFull}</span>
+                <span className="block text-xs font-bold text-stone-850 font-mono mt-1">
                   {d.revenue > 0 ? `${(d.revenue / 1000).toFixed(0)}k` : '0'}
                 </span>
               </div>
