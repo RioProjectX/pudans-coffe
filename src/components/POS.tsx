@@ -36,9 +36,18 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
   const [cashAmount, setCashAmount] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // Helper to get local date string YYYY-MM-DD
+  const getLocalDateString = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Backfill / Manual Recovered States
   const [isBackfill, setIsBackfill] = useState(false);
-  const [backfillDate, setBackfillDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [backfillDate, setBackfillDate] = useState(() => getLocalDateString());
   const [backfillTime, setBackfillTime] = useState(() => {
     const now = new Date();
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -301,6 +310,14 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
       amountPaid: total,
       changeAmount: 0,
       customerName: customerName.trim(),
+      notes: notes.trim() || undefined,
+      paymentStatus: isBackfill ? backfillPaymentStatus : 'Lunas',
+      isBackfill,
+      backfillDate: isBackfill ? backfillDate : undefined,
+      backfillTime: isBackfill ? backfillTime : undefined,
+      backfilledBy: isBackfill ? userRole : undefined,
+      backfillReason: isBackfill ? (backfillReason.trim() || 'No reason provided') : undefined,
+      adjustStock: isBackfill ? adjustStock : undefined,
     };
 
     console.log(`[STAGE 3: DISPATCH TO SERVER] Handing QRIS transaction payload to App.tsx onCheckout...`, payload);
@@ -394,7 +411,7 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
                       <label className="text-[9px] text-amber-800 font-bold uppercase">Tanggal</label>
                       <input
                         type="date"
-                        max={new Date().toISOString().split('T')[0]}
+                        max={getLocalDateString()}
                         value={backfillDate}
                         onChange={(e) => setBackfillDate(e.target.value)}
                         className="w-full px-2 py-1 border border-amber-200 rounded-lg text-stone-700 font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"

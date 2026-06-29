@@ -268,10 +268,25 @@ export default function App() {
 
     // Chronological routing for backfills
     if (details.isBackfill && details.backfillDate) {
-      const selectedDateTime = new Date(`${details.backfillDate}T${details.backfillTime || '12:00'}`);
-      if (!isNaN(selectedDateTime.getTime())) {
-        timestampStr = selectedDateTime.toISOString();
-        todayStr = details.backfillDate.replace(/-/g, '');
+      let timeStr = details.backfillTime || '12:00';
+      if (timeStr.split(':').length === 2) {
+        timeStr += ':00';
+      }
+      const dateParts = details.backfillDate.split('-');
+      const timeParts = timeStr.split(':');
+      if (dateParts.length === 3 && timeParts.length >= 2) {
+        const year = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1;
+        const day = parseInt(dateParts[2], 10);
+        const hours = parseInt(timeParts[0], 10);
+        const minutes = parseInt(timeParts[1], 10);
+        const seconds = timeParts[2] ? parseInt(timeParts[2], 10) : 0;
+        
+        const selectedDateTime = new Date(year, month, day, hours, minutes, seconds);
+        if (!isNaN(selectedDateTime.getTime())) {
+          timestampStr = selectedDateTime.toISOString();
+          todayStr = details.backfillDate.replace(/-/g, '');
+        }
       }
     }
     
@@ -322,17 +337,17 @@ export default function App() {
     const finalPaymentStatus = details.paymentStatus || 'Belum Bayar';
 
     const freshTx: Transaction = {
+      ...details,
       id: invoiceId,
       timestamp: timestampStr,
       created_at: new Date().toISOString(),
       transaction_date: details.isBackfill && details.backfillDate ? details.backfillDate : timestampStr.split('T')[0],
       isBackfill: details.isBackfill || false,
-      backfilledBy: details.backfilledBy || undefined,
-      backfillReason: details.backfillReason || undefined,
-      adjustStock: details.adjustStock ?? false,
+      backfilledBy: details.isBackfill ? (details.backfilledBy || 'ADMIN') : undefined,
+      backfillReason: details.isBackfill ? (details.backfillReason || 'No reason provided') : undefined,
+      adjustStock: details.isBackfill ? (details.adjustStock ?? false) : false,
       notes: details.notes || undefined,
       stockAdjusted: false,
-      ...details,
       paymentStatus: finalPaymentStatus
     };
 
