@@ -10,13 +10,23 @@ interface HistoryProps {
   onRevertToUnpaid?: (id: string) => Promise<void>;
 }
 
-type DateRangeFilter = 'ALL' | 'TODAY' | 'YESTERDAY' | 'WEEK';
+type DateRangeFilter = 'ALL' | 'TODAY' | 'YESTERDAY' | 'WEEK' | 'CUSTOM';
 
 export default function History({ transactions, onSelectTransaction, onClearAllTransactions, onDeleteTransaction, onRevertToUnpaid }: HistoryProps) {
+  // Helper to get local date string YYYY-MM-DD
+  const getLocalDateString = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'CASH' | 'QRIS'>('ALL');
   const [dateFilter, setDateFilter] = useState<DateRangeFilter>('ALL');
+  const [customDate, setCustomDate] = useState<string>(() => getLocalDateString());
 
   // Previewing selected invoice meta detail local state
   const [selectedTxId, setSelectedTxId] = useState<string | null>(null);
@@ -96,11 +106,18 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
         startOf7DaysAgo.setDate(today.getDate() - 7);
         startOf7DaysAgo.setHours(0, 0, 0, 0);
         matchDate = tDate >= startOf7DaysAgo;
+      } else if (dateFilter === 'CUSTOM') {
+        const targetDateStr = customDate; // "YYYY-MM-DD"
+        const tYear = tDate.getFullYear();
+        const tMonth = String(tDate.getMonth() + 1).padStart(2, '0');
+        const tDay = String(tDate.getDate()).padStart(2, '0');
+        const tFormatted = `${tYear}-${tMonth}-${tDay}`;
+        matchDate = tFormatted === targetDateStr;
       }
 
       return matchSearch && matchPayment && matchDate;
     }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()); // newest first
-  }, [transactions, searchQuery, paymentFilter, dateFilter]);
+  }, [transactions, searchQuery, paymentFilter, dateFilter, customDate]);
 
   // Selected Transaction Object
   const selectedTxObj = useMemo(() => {
@@ -151,7 +168,18 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
                 <option value="TODAY">Hari Ini</option>
                 <option value="YESTERDAY">Kemarin</option>
                 <option value="WEEK">7 Hari Terakhir</option>
+                <option value="CUSTOM">📅 Pilih Tanggal...</option>
               </select>
+
+              {dateFilter === 'CUSTOM' && (
+                <input
+                  type="date"
+                  value={customDate}
+                  max={getLocalDateString()}
+                  onChange={(e) => setCustomDate(e.target.value)}
+                  className="px-3 py-2 border border-[#D4A373] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#D4A373] bg-white text-xs font-semibold text-stone-700 font-mono"
+                />
+              )}
 
               {onClearAllTransactions && transactions.length > 0 && (
                 <button
