@@ -45,13 +45,24 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
     return `${year}-${month}-${day}`;
   };
 
+  const getYesterdayDateString = () => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getCurrentTimeString = () => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  };
+
   // Backfill / Manual Recovered States
   const [isBackfill, setIsBackfill] = useState(false);
   const [backfillDate, setBackfillDate] = useState(() => getLocalDateString());
-  const [backfillTime, setBackfillTime] = useState(() => {
-    const now = new Date();
-    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  });
+  const [backfillTime, setBackfillTime] = useState(() => getCurrentTimeString());
   const [backfillReason, setBackfillReason] = useState('');
   const [adjustStock, setAdjustStock] = useState(true);
   const [backfillPaymentStatus, setBackfillPaymentStatus] = useState<'Belum Bayar' | 'Lunas'>('Lunas');
@@ -217,6 +228,23 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
 
     if (isSubmitting) return;
 
+    if (isBackfill) {
+      // Validate backfillDate format (YYYY-MM-DD)
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(backfillDate)) {
+        setValidationError("Format tanggal backfill salah! Harus YYYY-MM-DD (contoh: 2026-06-28)");
+        setTimeout(() => setValidationError(null), 5000);
+        return;
+      }
+      // Validate backfillTime format (HH:MM)
+      const timeRegex = /^\d{2}:\d{2}(:\d{2})?$/;
+      if (!timeRegex.test(backfillTime)) {
+        setValidationError("Format jam backfill salah! Harus HH:MM (contoh: 14:30)");
+        setTimeout(() => setValidationError(null), 5000);
+        return;
+      }
+    }
+
     setValidationError(null);
 
     console.log(`[STAGE 2: VALIDATION SUCCESS] Cart & Customer Name validated. Formulating transaction payload...`, {
@@ -287,6 +315,23 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
       setValidationError("Nama Pelanggan wajib diisi untuk pembayaran QRIS!");
       setTimeout(() => setValidationError(null), 4000);
       return;
+    }
+
+    if (isBackfill) {
+      // Validate backfillDate format (YYYY-MM-DD)
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(backfillDate)) {
+        setValidationError("Format tanggal backfill salah! Harus YYYY-MM-DD (contoh: 2026-06-28)");
+        setTimeout(() => setValidationError(null), 5000);
+        return;
+      }
+      // Validate backfillTime format (HH:MM)
+      const timeRegex = /^\d{2}:\d{2}(:\d{2})?$/;
+      if (!timeRegex.test(backfillTime)) {
+        setValidationError("Format jam backfill salah! Harus HH:MM (contoh: 14:30)");
+        setTimeout(() => setValidationError(null), 5000);
+        return;
+      }
     }
 
     setPaymentMethod('QRIS');
@@ -407,24 +452,50 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
               {isBackfill && (
                 <div className="space-y-2 border-t border-amber-100/60 pt-2 animate-in slide-in-from-top duration-200">
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-0.5">
-                      <label className="text-[9px] text-amber-800 font-bold uppercase">Tanggal</label>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-amber-800 font-bold uppercase block">Tanggal (YYYY-MM-DD)</label>
                       <input
-                        type="date"
-                        max={getLocalDateString()}
+                        type="text"
+                        placeholder="Format: 2026-06-28"
                         value={backfillDate}
                         onChange={(e) => setBackfillDate(e.target.value)}
                         className="w-full px-2 py-1 border border-amber-200 rounded-lg text-stone-700 font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
                       />
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setBackfillDate(getLocalDateString())}
+                          className="px-1.5 py-0.5 text-[8px] bg-amber-100 text-amber-800 rounded hover:bg-amber-200 transition font-bold"
+                        >
+                          Hari Ini
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBackfillDate(getYesterdayDateString())}
+                          className="px-1.5 py-0.5 text-[8px] bg-amber-100 text-amber-800 rounded hover:bg-amber-200 transition font-bold"
+                        >
+                          Kemarin
+                        </button>
+                      </div>
                     </div>
-                    <div className="space-y-0.5">
-                      <label className="text-[9px] text-amber-800 font-bold uppercase">Jam</label>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-amber-800 font-bold uppercase block">Jam (HH:MM)</label>
                       <input
-                        type="time"
+                        type="text"
+                        placeholder="Format: 14:30"
                         value={backfillTime}
                         onChange={(e) => setBackfillTime(e.target.value)}
                         className="w-full px-2 py-1 border border-amber-200 rounded-lg text-stone-700 font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white"
                       />
+                      <div className="flex">
+                        <button
+                          type="button"
+                          onClick={() => setBackfillTime(getCurrentTimeString())}
+                          className="px-1.5 py-0.5 text-[8px] bg-amber-100 text-amber-800 rounded hover:bg-amber-200 transition font-bold"
+                        >
+                          Jam Sekarang
+                        </button>
+                      </div>
                     </div>
                   </div>
 
