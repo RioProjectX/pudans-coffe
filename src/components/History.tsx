@@ -10,7 +10,7 @@ interface HistoryProps {
   onRevertToUnpaid?: (id: string) => Promise<void>;
 }
 
-type DateRangeFilter = 'ALL' | 'TODAY' | 'YESTERDAY' | 'WEEK' | 'CUSTOM';
+type DateRangeFilter = 'ALL' | 'TODAY' | 'YESTERDAY' | 'CUSTOM';
 
 export default function History({ transactions, onSelectTransaction, onClearAllTransactions, onDeleteTransaction, onRevertToUnpaid }: HistoryProps) {
   // Helper to get local date string YYYY-MM-DD
@@ -101,11 +101,6 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
         endOfYesterday.setHours(0, 0, 0, 0);
 
         matchDate = tDate >= startOfYesterday && tDate < endOfYesterday;
-      } else if (dateFilter === 'WEEK') {
-        const startOf7DaysAgo = new Date(today);
-        startOf7DaysAgo.setDate(today.getDate() - 7);
-        startOf7DaysAgo.setHours(0, 0, 0, 0);
-        matchDate = tDate >= startOf7DaysAgo;
       } else if (dateFilter === 'CUSTOM') {
         const targetDateStr = customDate; // "YYYY-MM-DD"
         const tYear = tDate.getFullYear();
@@ -167,7 +162,6 @@ export default function History({ transactions, onSelectTransaction, onClearAllT
                 <option value="ALL">📅 Semua Waktu</option>
                 <option value="TODAY">Hari Ini</option>
                 <option value="YESTERDAY">Kemarin</option>
-                <option value="WEEK">7 Hari Terakhir</option>
                 <option value="CUSTOM">📅 Pilih Tanggal...</option>
               </select>
 
