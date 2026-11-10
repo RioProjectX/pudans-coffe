@@ -13,8 +13,11 @@ interface BluetoothPrinterContextType {
   setConnectionMode: (mode: ConnectionMode) => void;
   connect: (mode?: ConnectionMode) => Promise<boolean>;
   disconnect: () => void;
-  printReceipt: (transaction: Transaction) => Promise<boolean>;
+  printReceipt: (transaction: Transaction, openDrawerOverride?: boolean) => Promise<boolean>;
   printKitchenTicket: (transaction: Transaction) => Promise<boolean>;
+  openCashDrawer: () => Promise<boolean>;
+  autoOpenDrawer: boolean;
+  setAutoOpenDrawer: (open: boolean) => void;
   printTestSlip: () => Promise<boolean>;
   sendCustomText: (text: string) => Promise<boolean>;
   clearError: () => void;
@@ -35,6 +38,20 @@ export function BluetoothPrinterProvider({ children }: { children: ReactNode }) 
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>('escpos_filter');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [autoOpenDrawer, setAutoOpenDrawerState] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pudans_auto_drawer');
+      return saved !== null ? saved === 'true' : true; // Default: true (otomatis buka saat bill keluar)
+    }
+    return true;
+  });
+
+  const setAutoOpenDrawer = (val: boolean) => {
+    setAutoOpenDrawerState(val);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pudans_auto_drawer', String(val));
+    }
+  };
 
   useEffect(() => {
     setIsSupported(bluetoothPrinter.isSupported());
@@ -76,7 +93,7 @@ export function BluetoothPrinterProvider({ children }: { children: ReactNode }) 
     setStatusMessage('Koneksi printer telah diputuskan.');
   }, []);
 
-  const printReceipt = useCallback(async (transaction: Transaction): Promise<boolean> => {
+  const printReceipt = useCallback(async (transaction: Transaction, openDrawerOverride?: boolean): Promise<boolean> => {
     if (!isConnected) {
       setLastError('Printer Bluetooth belum terhubung.');
       return false;
@@ -84,15 +101,39 @@ export function BluetoothPrinterProvider({ children }: { children: ReactNode }) 
 
     setIsPrinting(true);
     setLastError(null);
-    setStatusMessage('Mengirim data struk ke printer...');
+    const shouldOpenDrawer = openDrawerOverride !== undefined ? openDrawerOverride : autoOpenDrawer;
+    setStatusMessage(shouldOpenDrawer ? 'Mencetak struk & membuka laci kasir (RJ11)...' : 'Mengirim data struk ke printer...');
 
     try {
-      await bluetoothPrinter.printReceipt(transaction);
-      setStatusMessage('Struk berhasil dicetak!');
+      await bluetoothPrinter.printReceipt(transaction, 32, shouldOpenDrawer);
+      setStatusMessage(shouldOpenDrawer ? 'Struk berhasil dicetak & laci kasir terbuka!' : 'Struk berhasil dicetak!');
       return true;
     } catch (err: any) {
       console.error('Print error:', err);
       setLastError(err.message || 'Gagal mengirim data ke printer.');
+      return false;
+    } finally {
+      setIsPrinting(false);
+    }
+  }, [isConnected, autoOpenDrawer]);
+
+  const openCashDrawer = useCallback(async (): Promise<boolean> => {
+    if (!isConnected) {
+      setLastError('Printer Bluetooth belum terhubung.');
+      return false;
+    }
+
+    setIsPrinting(true);
+    setLastError(null);
+    setStatusMessage('Mengirim sinyal pembuka laci kasir (RJ11)...');
+
+    try {
+      await bluetoothPrinter.openCashDrawer();
+      setStatusMessage('Laci kasir (Cash Drawer) berhasil terbuka!');
+      return true;
+    } catch (err: any) {
+      console.error('Open cash drawer error:', err);
+      setLastError(err.message || 'Gagal membuka laci kasir. Pastikan kabel RJ11 tercolok erat ke port DK printer.');
       return false;
     } finally {
       setIsPrinting(false);
@@ -185,6 +226,9 @@ export function BluetoothPrinterProvider({ children }: { children: ReactNode }) 
         disconnect,
         printReceipt,
         printKitchenTicket,
+        openCashDrawer,
+        autoOpenDrawer,
+        setAutoOpenDrawer,
         printTestSlip,
         sendCustomText,
         clearError,

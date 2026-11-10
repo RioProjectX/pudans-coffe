@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Transaction } from '../types';
-import { X, Printer, CheckCircle2, Bluetooth, RefreshCw, AlertCircle, Eye, Settings2 } from 'lucide-react';
+import { X, Printer, CheckCircle2, Bluetooth, RefreshCw, AlertCircle, Eye, Settings2, Coins } from 'lucide-react';
 import { useBluetoothPrinter } from '../context/BluetoothPrinterContext';
 
 interface ReceiptModalProps {
@@ -18,6 +18,8 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
     deviceInfo,
     connect,
     printReceipt,
+    openCashDrawer,
+    autoOpenDrawer,
     lastError,
     statusMessage,
     setIsSettingsOpen
@@ -89,7 +91,10 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
 
     const success = await printReceipt(transaction);
     if (success) {
-      setPrintSuccess(`Struk berhasil dicetak ke ${deviceInfo?.name || 'Printer Bluetooth'}!`);
+      const msg = autoOpenDrawer 
+        ? `Struk dicetak & laci kasir (RJ11) terbuka di ${deviceInfo?.name || 'Printer Bluetooth'}!`
+        : `Struk berhasil dicetak ke ${deviceInfo?.name || 'Printer Bluetooth'}!`;
+      setPrintSuccess(msg);
       setTimeout(() => setPrintSuccess(null), 4000);
     }
   };
@@ -312,11 +317,25 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
               <Printer size={14} className="text-stone-500" /> Cetak Browser / PDF
             </button>
 
+            {/* Cash Drawer RJ11 manual button */}
+            {isConnected && (
+              <button
+                type="button"
+                onClick={openCashDrawer}
+                disabled={isPrinting}
+                title="Buka Laci Kasir Sekarang (RJ11 Cash Drawer)"
+                className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-semibold transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+              >
+                <Coins size={14} className="text-emerald-700" />
+                <span className="hidden sm:inline">Laci</span>
+              </button>
+            )}
+
             {/* Quick Open Settings button */}
             <button
               type="button"
               onClick={() => setIsSettingsOpen(true)}
-              title="Buka Pengaturan Printer"
+              title="Buka Pengaturan Printer &amp; Cash Drawer"
               className="px-3 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-xl text-xs font-semibold transition flex items-center gap-1"
             >
               <Settings2 size={14} />

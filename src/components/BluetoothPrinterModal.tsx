@@ -11,7 +11,10 @@ import {
   Unlink, 
   Sparkles, 
   HelpCircle,
-  FileText
+  FileText,
+  Coins,
+  Unlock,
+  ShieldCheck
 } from 'lucide-react';
 
 const SAMPLE_RECEIPT_TEXT = `================================
@@ -59,6 +62,9 @@ export default function BluetoothPrinterModal() {
     disconnect,
     printTestSlip,
     sendCustomText,
+    openCashDrawer,
+    autoOpenDrawer,
+    setAutoOpenDrawer,
     clearError,
     isSettingsOpen,
     setIsSettingsOpen
@@ -295,12 +301,12 @@ export default function BluetoothPrinterModal() {
 
           {/* Quick Actions when Connected */}
           {isConnected && (
-            <div className="flex gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={printTestSlip}
                 disabled={isPrinting}
-                className="flex-1 bg-amber-700 hover:bg-amber-800 text-white py-2.5 px-3 rounded-xl font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                className="bg-amber-700 hover:bg-amber-800 text-white py-2.5 px-3 rounded-xl font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
               >
                 {isPrinting ? (
                   <RefreshCw size={14} className="animate-spin" />
@@ -309,8 +315,89 @@ export default function BluetoothPrinterModal() {
                 )}
                 <span>Cetak Lembar Tes Struk</span>
               </button>
+
+              <button
+                type="button"
+                onClick={openCashDrawer}
+                disabled={isPrinting}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white py-2.5 px-3 rounded-xl font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                {isPrinting ? (
+                  <RefreshCw size={14} className="animate-spin" />
+                ) : (
+                  <Unlock size={14} />
+                )}
+                <span>Buka Cash Drawer (RJ11)</span>
+              </button>
             </div>
           )}
+
+          {/* Cash Drawer RJ11 Control & Automation Card */}
+          <div className="bg-white p-4 rounded-2xl border border-stone-200 space-y-3 shadow-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center">
+                  <Coins size={16} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-xs text-stone-900 flex items-center gap-1.5">
+                    Laci Kasir (Cash Drawer RJ11 / DK)
+                    <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-mono font-bold">
+                      ESC/POS DK
+                    </span>
+                  </h4>
+                  <p className="text-[10px] text-stone-500">
+                    Koneksi kabel RJ11 dari laci kasir ke port DK printer termal
+                  </p>
+                </div>
+              </div>
+
+              {/* Status indicator */}
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                autoOpenDrawer ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-200 text-stone-600'
+              }`}>
+                {autoOpenDrawer ? 'OTOMATIS AKTIF' : 'NONAKTIF'}
+              </span>
+            </div>
+
+            <div className="bg-[#FAF7F2] p-3 rounded-xl border border-stone-150 space-y-2 text-xs">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoOpenDrawer}
+                  onChange={(e) => setAutoOpenDrawer(e.target.checked)}
+                  className="mt-0.5 rounded text-[#3C2A21] focus:ring-[#3C2A21]"
+                />
+                <div className="flex-1">
+                  <span className="font-bold text-stone-900 block">
+                    Buka laci otomatis saat struk pembayaran (bill) keluar
+                  </span>
+                  <span className="text-[11px] text-stone-500 block leading-tight mt-0.5">
+                    Printer akan mengirim pulsa elektrik 12V/24V via RJ11 untuk membuka laci kasir saat transaksi diselesaikan.
+                  </span>
+                </div>
+              </label>
+
+              <div className="flex items-center gap-1.5 text-[10px] text-stone-600 pt-1 border-t border-stone-200/60 font-sans">
+                <ShieldCheck size={13} className="text-emerald-600 flex-shrink-0" />
+                <span>
+                  <strong>Aman:</strong> Struk antrian pesanan dapur (kitchen ticket) <em>tidak akan</em> membuka laci kasir demi menjaga keamanan uang kas.
+                </span>
+              </div>
+            </div>
+
+            {isConnected && (
+              <button
+                type="button"
+                onClick={openCashDrawer}
+                disabled={isPrinting}
+                className="w-full bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200/80 py-2 px-3 rounded-xl font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Unlock size={13} className="text-stone-600" />
+                <span>Uji / Buka Laci Kasir Sekarang</span>
+              </button>
+            )}
+          </div>
 
           {/* Interactive simple receipt text send section */}
           <div className="bg-white p-4 rounded-2xl border border-stone-200 space-y-2.5 shadow-xs">

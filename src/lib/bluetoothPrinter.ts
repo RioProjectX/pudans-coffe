@@ -37,6 +37,12 @@ export const COMMANDS = {
   FEED_3_LINES: new Uint8Array([ESC, 0x64, 0x03]), // Feed 3 lines
   FEED_4_LINES: new Uint8Array([ESC, 0x64, 0x04]), // Feed 4 lines
   CUT_PARTIAL: new Uint8Array([GS, 0x56, 0x42, 0x00]), // GS V 66 0
+  // Universal ESC/POS RJ11 Drawer Kick Pulse (Pin 2 + Pin 5 + DLE DC4 real-time kick)
+  DRAWER_KICK: new Uint8Array([
+    ESC, 0x70, 0x00, 0x19, 0xfa, // ESC p 0 25 250 (Pin 2: 50ms pulse)
+    ESC, 0x70, 0x01, 0x19, 0xfa, // ESC p 1 25 250 (Pin 5)
+    0x10, 0x14, 0x01, 0x00, 0x01  // DLE DC4 real-time drawer kick
+  ]),
 };
 
 export interface BluetoothPrinterDevice {
@@ -373,11 +379,43 @@ class BluetoothPrinterService {
   }
 
   /**
-   * Print a complete transaction receipt with styled ESC/POS commands
+   * Send ESC/POS pulse to open RJ11/RJ12 Cash Drawer connected to the printer
    */
-  public async printReceipt(transaction: Transaction, colWidth: number = 32): Promise<void> {
+  public async openCashDrawer(): Promise<void> {
+    if (!this.isConnected()) {
+      throw new Error('Printer Bluetooth belum terhubung.');
+    }
+    console.log('[Web Bluetooth ESC/POS] Mengirim pulsa elektrik pembuka Cash Drawer RJ11...');
+    await this.sendRaw(COMMANDS.DRAWER_KICK);
+  }
+
+  /**
+   * Print a complete transaction receipt with styled ESC/POS commands
+   * @param openDrawer If true, triggers RJ11 cash drawer kick (only for payment bill, NOT for kitchen queue slips)
+   */
+  public async printReceipt(
+    transaction: Transaction,
+    colWidth: number = 32,
+    openDrawer: boolean = true
+  ): Promise<void> {
     const rawText = this.generateSimpleReceiptText(transaction, colWidth);
-    await this.sendSimpleText(rawText);
+    const encoder = new TextEncoder();
+    const initBytes = COMMANDS.INIT;
+    const kickBytes = openDrawer ? COMMANDS.DRAWER_KICK : new Uint8Array(0);
+    const textBytes = encoder.encode(rawText + '\n\n\n\n');
+    const cutBytes = COMMANDS.CUT_PARTIAL;
+
+    const totalLength = initBytes.length + kickBytes.length + textBytes.length + cutBytes.length;
+    const merged = new Uint8Array(totalLength);
+    let offset = 0;
+    merged.set(initBytes, offset); offset += initBytes.length;
+    if (openDrawer) {
+      merged.set(kickBytes, offset); offset += kickBytes.length;
+    }
+    merged.set(textBytes, offset); offset += textBytes.length;
+    merged.set(cutBytes, offset); offset += cutBytes.length;
+
+    await this.sendRaw(merged);
   }
 
   /**
