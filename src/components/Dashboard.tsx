@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Transaction, Product } from '../types';
-import { TrendingUp, DollarSign, ShoppingBag, Award, Clock, ArrowUpRight, ArrowDownRight, Coffee, Utensils, Sparkles, AlertCircle, Trash2, RotateCcw, Calendar, Users, Trophy, Crown } from 'lucide-react';
+import { TrendingUp, DollarSign, ShoppingBag, Award, Clock, ArrowUpRight, ArrowDownRight, Coffee, Utensils, AlertCircle, Trash2, RotateCcw, Calendar, Users, Trophy, Crown } from 'lucide-react';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -423,8 +423,8 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
           <Coffee size={350} />
         </div>
         <div className="relative z-10 max-w-xl">
-          <span className="bg-[#D4A373]/30 text-[#F5F2ED] px-4 py-1.5 rounded-full text-xs font-semibold tracking-wider uppercase inline-flex items-center gap-1.5 mb-4 border border-[#D4A373]/20">
-            <Sparkles size={12} className="text-[#D4A373]" /> Buatan Rio ganteng untuk pudans
+          <span className="bg-[#D4A373]/30 text-[#F5F2ED] px-4 py-1.5 rounded-full text-xs font-semibold tracking-wider uppercase inline-flex items-center mb-4 border border-[#D4A373]/20">
+            POS KASIR Made by Rio
           </span>
           <h1 className="text-3xl sm:text-4xl font-serif font-bold tracking-tight text-[#F9F6F0]">
             Pudan's Coffee
