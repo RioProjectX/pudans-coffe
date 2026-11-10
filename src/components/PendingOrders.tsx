@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Transaction, PaymentMethod, Product, Category } from '../types';
-import { Clock, Search, CheckCircle, Check, X, AlertTriangle, Printer, Smartphone, DollarSign, ArrowRight, Plus, Minus, AlertCircle, Users, Scissors } from 'lucide-react';
+import { Clock, Search, CheckCircle, Check, X, AlertTriangle, Printer, Smartphone, DollarSign, ArrowRight, Plus, Minus, AlertCircle, Users, Scissors, ChefHat } from 'lucide-react';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import KitchenTicketModal from './KitchenTicketModal';
 
 interface PendingOrdersProps {
   transactions: Transaction[];
@@ -51,6 +52,8 @@ function sanitizeFirestoreData<T>(data: T): T {
 export default function PendingOrders({ transactions, products, onConfirmPayment, onUpdateTransactionItems }: PendingOrdersProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [txToConfirm, setTxToConfirm] = useState<Transaction | null>(null);
+  const [kitchenTicketTx, setKitchenTicketTx] = useState<Transaction | null>(null);
+  const [printedKitchenOrders, setPrintedKitchenOrders] = useState<{ [id: string]: boolean }>({});
   
   // Payment processing states
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
@@ -633,9 +636,16 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
                       )}
                     </div>
                   </div>
-                  <span className="bg-rose-50 text-rose-600 border border-rose-100 text-[10px] px-2.5 py-1 rounded-full font-bold font-sans uppercase tracking-wide select-none">
-                    Belum Bayar
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    {printedKitchenOrders[tx.id] && (
+                      <span className="bg-amber-100/90 text-amber-900 border border-amber-300 text-[10px] px-2 py-0.5 rounded-full font-bold font-sans flex items-center gap-1 shadow-2xs">
+                        <ChefHat size={11} className="text-amber-700" /> Dapur Siap
+                      </span>
+                    )}
+                    <span className="bg-rose-50 text-rose-600 border border-rose-100 text-[10px] px-2.5 py-1 rounded-full font-bold font-sans uppercase tracking-wide select-none">
+                      Belum Bayar
+                    </span>
+                  </div>
                 </div>
 
                 {/* Date and Customer */}
@@ -696,14 +706,30 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleOpenPayment(tx)}
-                  className="w-full bg-[#3C2A21] hover:bg-[#2A1D17] text-white py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm hover:shadow active:scale-98 cursor-pointer"
-                >
-                  <Check size={14} className="font-bold text-emerald-400" />
-                  <span>Konfirmasi Pembayaran</span>
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setKitchenTicketTx(tx)}
+                    className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs border cursor-pointer active:scale-98 ${
+                      printedKitchenOrders[tx.id]
+                        ? 'bg-amber-100/90 hover:bg-amber-200 text-amber-950 border-amber-300'
+                        : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-250 hover:border-amber-350'
+                    }`}
+                    title="Cetak struk antrian pesanan untuk diserahkan ke dapur / barista"
+                  >
+                    <ChefHat size={14} className={printedKitchenOrders[tx.id] ? "text-amber-800" : "text-amber-700"} />
+                    <span className="truncate">{printedKitchenOrders[tx.id] ? 'Cetak Ulang Dapur' : 'Struk Dapur'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenPayment(tx)}
+                    className="flex-[1.4] bg-[#3C2A21] hover:bg-[#2A1D17] text-white py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm hover:shadow active:scale-98 cursor-pointer"
+                  >
+                    <Check size={14} className="font-bold text-emerald-400" />
+                    <span>Konfirmasi Bayar</span>
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -1751,6 +1777,15 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
 
           </div>
         </div>
+      )}
+
+      {/* Kitchen Order Ticket Modal */}
+      {kitchenTicketTx && (
+        <KitchenTicketModal
+          transaction={kitchenTicketTx}
+          onClose={() => setKitchenTicketTx(null)}
+          onPrinted={(txId) => setPrintedKitchenOrders(prev => ({ ...prev, [txId]: true }))}
+        />
       )}
 
     </div>

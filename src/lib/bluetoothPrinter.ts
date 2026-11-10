@@ -318,7 +318,7 @@ class BluetoothPrinterService {
     lines.push(padCenter("PUDAN'S COFFEE"));
     lines.push(padCenter('Kopi Premium, Cemilan & Kuliner'));
     lines.push(padCenter('Jl. Terompet No. 69, Medan Baru'));
-    lines.push(padCenter('Telp: 0812-3456-7890'));
+    lines.push(padCenter('IG: @pudanscoffee'));
     lines.push(subDiv);
 
     // Meta details
@@ -377,6 +377,77 @@ class BluetoothPrinterService {
    */
   public async printReceipt(transaction: Transaction, colWidth: number = 32): Promise<void> {
     const rawText = this.generateSimpleReceiptText(transaction, colWidth);
+    await this.sendSimpleText(rawText);
+  }
+
+  /**
+   * Generate clean formatted text for Kitchen Order Ticket (KOT / Struk Dapur)
+   */
+  public generateKitchenTicketText(transaction: Transaction, colWidth: number = 32): string {
+    const lines: string[] = [];
+    const div = '='.repeat(colWidth);
+    const subDiv = '-'.repeat(colWidth);
+
+    const padCenter = (str: string) => {
+      const text = str.trim();
+      if (text.length >= colWidth) return text.substring(0, colWidth);
+      const remaining = colWidth - text.length;
+      const left = Math.floor(remaining / 2);
+      return ' '.repeat(left) + text;
+    };
+
+    const padTwoCol = (left: string, right: string) => {
+      const l = left.trim();
+      const r = right.trim();
+      const available = colWidth - r.length;
+      if (l.length >= available) {
+        return l.substring(0, Math.max(0, available - 1)) + ' ' + r;
+      }
+      return l + ' '.repeat(colWidth - l.length - r.length) + r;
+    };
+
+    // Extract queue index or sequence from invoice ID
+    const parts = transaction.id.split('-');
+    const queueNo = parts.length >= 3 ? parts[2] : transaction.id.slice(-4);
+
+    lines.push(div);
+    lines.push(padCenter('*** STRUK DAPUR / KITCHEN ***'));
+    lines.push(padCenter("PUDAN'S COFFEE"));
+    lines.push(div);
+    lines.push(padTwoCol('NO. ANTRIAN', `#${queueNo}`));
+    lines.push(padTwoCol('PELANGGAN', transaction.customerName || 'Walk-In'));
+    const txTime = transaction.timestamp ? transaction.timestamp.replace('T', ' ').substring(0, 16) : '-';
+    lines.push(padTwoCol('WAKTU', txTime));
+    lines.push(padTwoCol('ID PESANAN', transaction.id));
+    lines.push(subDiv);
+    lines.push(padTwoCol('QTY  MENU PESANAN', 'CEK'));
+    lines.push(subDiv);
+
+    let totalQty = 0;
+    transaction.items.forEach((item) => {
+      totalQty += item.quantity;
+      lines.push(`[ ] ${item.quantity}x ${item.name.substring(0, colWidth - 8)}`);
+    });
+
+    lines.push(subDiv);
+    if (transaction.notes) {
+      lines.push(`Catatan: ${transaction.notes}`);
+      lines.push(subDiv);
+    }
+    lines.push(padTwoCol('TOTAL PESANAN', `${totalQty} Porsi`));
+    lines.push(div);
+    lines.push(padCenter('MOHON SEGERA DISIAPKAN'));
+    lines.push(padCenter("Barista & Kitchen Team"));
+    lines.push(div);
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Print a kitchen order ticket
+   */
+  public async printKitchenTicket(transaction: Transaction, colWidth: number = 32): Promise<void> {
+    const rawText = this.generateKitchenTicketText(transaction, colWidth);
     await this.sendSimpleText(rawText);
   }
 

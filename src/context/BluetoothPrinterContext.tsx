@@ -14,6 +14,7 @@ interface BluetoothPrinterContextType {
   connect: (mode?: ConnectionMode) => Promise<boolean>;
   disconnect: () => void;
   printReceipt: (transaction: Transaction) => Promise<boolean>;
+  printKitchenTicket: (transaction: Transaction) => Promise<boolean>;
   printTestSlip: () => Promise<boolean>;
   sendCustomText: (text: string) => Promise<boolean>;
   clearError: () => void;
@@ -98,6 +99,29 @@ export function BluetoothPrinterProvider({ children }: { children: ReactNode }) 
     }
   }, [isConnected]);
 
+  const printKitchenTicket = useCallback(async (transaction: Transaction): Promise<boolean> => {
+    if (!isConnected) {
+      setLastError('Printer Bluetooth belum terhubung.');
+      return false;
+    }
+
+    setIsPrinting(true);
+    setLastError(null);
+    setStatusMessage('Mencetak struk antrian pesanan ke dapur...');
+
+    try {
+      await bluetoothPrinter.printKitchenTicket(transaction);
+      setStatusMessage('Struk dapur berhasil dicetak!');
+      return true;
+    } catch (err: any) {
+      console.error('Kitchen ticket print error:', err);
+      setLastError(err.message || 'Gagal mengirim struk pesanan ke dapur.');
+      return false;
+    } finally {
+      setIsPrinting(false);
+    }
+  }, [isConnected]);
+
   const printTestSlip = useCallback(async (): Promise<boolean> => {
     if (!isConnected) {
       setLastError('Printer Bluetooth belum terhubung.');
@@ -160,6 +184,7 @@ export function BluetoothPrinterProvider({ children }: { children: ReactNode }) 
         connect,
         disconnect,
         printReceipt,
+        printKitchenTicket,
         printTestSlip,
         sendCustomText,
         clearError,

@@ -18,7 +18,7 @@ const SAMPLE_RECEIPT_TEXT = `================================
          PUDAN'S COFFEE
 Kopi Premium, Cemilan & Kuliner
  Jl. Terompet No. 69 Medan Baru
-     Telp: 0812-3456-7890
+     IG: @pudanscoffee
 --------------------------------
 No. Struk : TX-CONTOH-001
 Tanggal   : 10 Nov 2026 15:30
