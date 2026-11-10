@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Transaction } from '../types';
-import { X, Printer, CheckCircle2 } from 'lucide-react';
+import { X, Printer, CheckCircle2, Bluetooth, RefreshCw, AlertCircle, Eye, Settings2 } from 'lucide-react';
+import { useBluetoothPrinter } from '../context/BluetoothPrinterContext';
 
 interface ReceiptModalProps {
   transaction: Transaction | null;
@@ -8,6 +10,21 @@ interface ReceiptModalProps {
 
 export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps) {
   if (!transaction) return null;
+
+  const {
+    isConnected,
+    isConnecting,
+    isPrinting,
+    deviceInfo,
+    connect,
+    printReceipt,
+    lastError,
+    statusMessage,
+    setIsSettingsOpen
+  } = useBluetoothPrinter();
+
+  const [printSuccess, setPrintSuccess] = useState<string | null>(null);
+  const [showTextPreview, setShowTextPreview] = useState(false);
 
   const formatIDR = (num: number) => {
     return 'Rp ' + num.toLocaleString('id-ID');
@@ -29,12 +46,10 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
     }
   };
 
-  const handlePrint = () => {
+  const handlePrintBrowser = () => {
     const printContent = document.getElementById('printable-receipt')?.innerHTML;
     if (!printContent) return;
     
-    // Create an iframe to print cleanly or open standard print dialog
-    const originalContent = document.body.innerHTML;
     const style = `
       <style>
         body { font-family: 'Courier New', Courier, monospace; padding: 20px; color: #000; font-size: 12px; }
@@ -57,12 +72,25 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
       win.document.write('</body></html>');
       win.document.close();
       
-      // Delay printing slightly to ensure assets/fonts load
       setTimeout(() => {
         win.focus();
         win.print();
         win.close();
       }, 350);
+    }
+  };
+
+  const handlePrintBluetooth = async () => {
+    setPrintSuccess(null);
+    if (!isConnected) {
+      const connected = await connect();
+      if (!connected) return;
+    }
+
+    const success = await printReceipt(transaction);
+    if (success) {
+      setPrintSuccess(`Struk berhasil dicetak ke ${deviceInfo?.name || 'Printer Bluetooth'}!`);
+      setTimeout(() => setPrintSuccess(null), 4000);
     }
   };
 
@@ -72,19 +100,49 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
         
         {/* Modal Header */}
         <div className="p-4 border-b border-stone-100 flex justify-between items-center bg-stone-50">
-          <span className="text-xs font-bold text-stone-500 uppercase tracking-wider flex items-center gap-1.5">
-            <CheckCircle2 size={14} className="text-emerald-600" /> Transaksi Selesai
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-stone-600 uppercase tracking-wider flex items-center gap-1.5">
+              <CheckCircle2 size={14} className="text-emerald-600" /> Transaksi Selesai
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsSettingsOpen(true)}
+              title="Pengaturan Printer Bluetooth"
+              className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold border transition cursor-pointer ${
+                isConnected
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                  : 'bg-stone-100 text-stone-600 border-stone-200 hover:bg-stone-200'
+              }`}
+            >
+              <Bluetooth size={10} className={isConnected ? 'text-emerald-600' : 'text-stone-400'} />
+              <span>{isConnected ? deviceInfo?.name?.substring(0, 12) || 'Printer' : 'Hubungkan'}</span>
+            </button>
+          </div>
           <button 
             onClick={onClose}
-            className="p-1.5 hover:bg-stone-200 rounded-full text-stone-400 hover:text-stone-700 transition"
+            className="p-1.5 hover:bg-stone-200 rounded-full text-stone-400 hover:text-stone-700 transition cursor-pointer"
           >
             <X size={18} />
           </button>
         </div>
 
+        {/* Feedback Alert Banners */}
+        {printSuccess && (
+          <div className="bg-emerald-50 border-b border-emerald-100 px-4 py-2 text-emerald-800 text-xs flex items-center gap-2">
+            <CheckCircle2 size={14} className="text-emerald-600 flex-shrink-0" />
+            <span className="font-semibold">{printSuccess}</span>
+          </div>
+        )}
+
+        {lastError && (
+          <div className="bg-rose-50 border-b border-rose-100 px-4 py-2 text-rose-800 text-xs flex items-center gap-2">
+            <AlertCircle size={14} className="text-rose-600 flex-shrink-0" />
+            <span className="truncate">{lastError}</span>
+          </div>
+        )}
+
         {/* Outer Struk Envelope with Paper texture */}
-        <div className="p-6 bg-stone-100 flex-1 flex flex-col items-center">
+        <div className="p-6 bg-stone-100 flex-1 flex flex-col items-center max-h-[60vh] overflow-y-auto">
           
           {/* Thermal Receipt Body */}
           <div 
@@ -106,7 +164,7 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
               <p className="text-[10px] text-stone-400 font-sans">Telp: 0812-3456-7890</p>
             </div>
 
-            {/* Dotteddivider */}
+            {/* Dotted divider */}
             <div className="border-t border-dashed border-stone-300 my-4"></div>
 
             {/* Invoice meta */}
@@ -129,7 +187,7 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
               </div>
             </div>
 
-            {/* Dotteddivider */}
+            {/* Dotted divider */}
             <div className="border-t border-dashed border-stone-300 my-4"></div>
 
             {/* Items table */}
@@ -152,7 +210,7 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
               ))}
             </div>
 
-            {/* Dotteddivider */}
+            {/* Dotted divider */}
             <div className="border-t border-dashed border-stone-300 my-4"></div>
 
             {/* Totals computation */}
@@ -179,7 +237,7 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
               </div>
             </div>
 
-            {/* Dotteddivider */}
+            {/* Dotted divider */}
             <div className="border-t border-dashed border-stone-300 my-4"></div>
 
             {/* Payment Details */}
@@ -198,7 +256,7 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
               </div>
             </div>
 
-            {/* Dotteddivider */}
+            {/* Dotted divider */}
             <div className="border-t border-dashed border-stone-300 my-4"></div>
 
             {/* Receipt Footer */}
@@ -211,22 +269,70 @@ export default function ReceiptModal({ transaction, onClose }: ReceiptModalProps
         </div>
 
         {/* Modal Actions */}
-        <div className="p-4 border-t border-stone-100 flex gap-3 bg-stone-50">
-          <button 
-            onClick={onClose}
-            className="flex-1 px-4 py-2.5 rounded-xl border border-stone-200 text-stone-600 text-xs font-semibold hover:bg-stone-100 hover:text-stone-800 transition text-center"
-          >
-            Tutup Dialog
-          </button>
+        <div className="p-4 border-t border-stone-100 flex flex-col gap-2.5 bg-stone-50">
           
+          {/* Main Bluetooth Thermal Print Button */}
           <button 
-            id="print-action-btn"
-            onClick={handlePrint}
-            className="flex-1 bg-[#3C2A21] hover:bg-[#2A1D17] text-white px-4 py-2.5 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 shadow-sm"
+            type="button"
+            id="print-bluetooth-action-btn"
+            onClick={handlePrintBluetooth}
+            disabled={isConnecting || isPrinting}
+            className="w-full bg-[#3C2A21] hover:bg-[#2A1D17] text-white px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm cursor-pointer disabled:opacity-50"
           >
-            <Printer size={15} /> Cetak Struk
+            {isConnecting ? (
+              <>
+                <RefreshCw size={15} className="animate-spin text-[#D4A373]" />
+                <span>Menghubungkan ke Printer...</span>
+              </>
+            ) : isPrinting ? (
+              <>
+                <RefreshCw size={15} className="animate-spin text-[#D4A373]" />
+                <span>Mencetak ke Thermal Bluetooth...</span>
+              </>
+            ) : (
+              <>
+                <Bluetooth size={15} className="text-[#D4A373]" />
+                <span>
+                  {isConnected 
+                    ? `Cetak Thermal (${deviceInfo?.name || 'Iware RPP02N'})` 
+                    : 'Hubungkan & Cetak Thermal'}
+                </span>
+              </>
+            )}
           </button>
+
+          <div className="flex gap-2">
+            {/* Secondary fallback print: Browser window.print() */}
+            <button 
+              id="print-action-btn"
+              type="button"
+              onClick={handlePrintBrowser}
+              className="flex-1 bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5"
+            >
+              <Printer size={14} className="text-stone-500" /> Cetak Browser / PDF
+            </button>
+
+            {/* Quick Open Settings button */}
+            <button
+              type="button"
+              onClick={() => setIsSettingsOpen(true)}
+              title="Buka Pengaturan Printer"
+              className="px-3 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-xl text-xs font-semibold transition flex items-center gap-1"
+            >
+              <Settings2 size={14} />
+            </button>
+
+            {/* Close button */}
+            <button 
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 text-xs font-semibold hover:bg-stone-100 hover:text-stone-800 transition"
+            >
+              Tutup
+            </button>
+          </div>
         </div>
+
       </div>
     </div>
   );

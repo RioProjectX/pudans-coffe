@@ -10,6 +10,9 @@ import PendingOrders from './components/PendingOrders';
 import { Coffee, LayoutDashboard, ShoppingBag, FolderOpen, Receipt, Clock } from 'lucide-react';
 import { collection, onSnapshot, setDoc, deleteDoc, doc, getDocs, writeBatch, getDoc } from 'firebase/firestore';
 import { db } from './lib/firebase';
+import { BluetoothPrinterProvider } from './context/BluetoothPrinterContext';
+import BluetoothPrinterModal from './components/BluetoothPrinterModal';
+import BluetoothHeaderButton from './components/BluetoothHeaderButton';
 
 enum OperationType {
   CREATE = 'create',
@@ -67,7 +70,7 @@ function sanitizeFirestoreData<T>(data: T): T {
   return data;
 }
 
-export default function App() {
+function AppContent() {
   // Navigation
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'POS' | 'PENDING' | 'CATALOG' | 'HISTORY'>('DASHBOARD');
 
@@ -476,8 +479,12 @@ export default function App() {
             </div>
           </div>
 
-          {/* Navigation layout items */}
-          <nav className="flex bg-black/15 p-1 rounded-2xl border border-white/5 w-full sm:w-auto overflow-x-auto">
+          {/* Action controls & navigation */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+            <BluetoothHeaderButton />
+
+            {/* Navigation layout items */}
+            <nav className="flex bg-black/15 p-1 rounded-2xl border border-white/5 w-full sm:w-auto overflow-x-auto">
             {([
               { id: 'DASHBOARD', label: 'Monitor', icon: LayoutDashboard },
               { id: 'POS', label: 'Kasir (POS)', icon: ShoppingBag },
@@ -511,7 +518,8 @@ export default function App() {
             })}
           </nav>
         </div>
-      </header>
+      </div>
+    </header>
 
       {/* Main interactive viewport panels */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -573,11 +581,22 @@ export default function App() {
         />
       )}
 
+      {/* Bluetooth Printer Pairing, Diagnostic, and Text Format Modal */}
+      <BluetoothPrinterModal />
+
       {/* Minimal responsive Footer credentials */}
       <footer className="bg-[#3C2A21] py-4 border-t border-black/15 text-center text-[10px] text-[#F5F2ED]/60 font-mono flex-shrink-0">
         <p>© 2026 Pudan's Coffee Cashier System. Build by RioProjectX</p>
       </footer>
 
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BluetoothPrinterProvider>
+      <AppContent />
+    </BluetoothPrinterProvider>
   );
 }
