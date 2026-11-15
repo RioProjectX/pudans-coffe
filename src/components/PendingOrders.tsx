@@ -1019,6 +1019,7 @@ export default function PendingOrders({ transactions, products, onConfirmPayment
                   { label: '🍳 Makanan', value: 'MAKANAN' },
                   { label: '🍰 Cemilan', value: 'CEMILAN' },
                   { label: '🚬 Rokok', value: 'ROKOK' },
+                  { label: '🎮 Games', value: 'GAMES' },
                 ] as const).map((cat) => (
                   <button
                     key={cat.value}

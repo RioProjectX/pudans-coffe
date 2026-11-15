@@ -393,7 +393,7 @@ export default function Dashboard({
 
   // 5. Category distribution
   const categorySplit = useMemo(() => {
-    const counts = { KOPI: 0, NON_KOPI: 0, MAKANAN: 0, CEMILAN: 0, ROKOK: 0 };
+    const counts = { KOPI: 0, NON_KOPI: 0, MAKANAN: 0, CEMILAN: 0, ROKOK: 0, GAMES: 0 };
     let totalRev = 0;
     
     transactions.forEach(t => {
@@ -413,6 +413,7 @@ export default function Dashboard({
       { name: 'Makanan Utama', value: counts.MAKANAN, color: '#8E8D8A', percentage: totalRev > 0 ? Math.round((counts.MAKANAN / totalRev) * 100) : 0 },
       { name: 'Roti & Cemilan', value: counts.CEMILAN, color: '#EAE7E2', percentage: totalRev > 0 ? Math.round((counts.CEMILAN / totalRev) * 100) : 0 },
       { name: 'Rokok', value: counts.ROKOK, color: '#A8A29E', percentage: totalRev > 0 ? Math.round((counts.ROKOK / totalRev) * 100) : 0 },
+      { name: 'Games', value: counts.GAMES, color: '#6366F1', percentage: totalRev > 0 ? Math.round((counts.GAMES / totalRev) * 100) : 0 },
     ];
   }, [transactions]);
 
@@ -424,6 +425,7 @@ export default function Dashboard({
       case 'MAKANAN': return 'Makanan';
       case 'CEMILAN': return 'Cemilan';
       case 'ROKOK': return 'Rokok';
+      case 'GAMES': return 'Games';
       default: return cat;
     }
   };

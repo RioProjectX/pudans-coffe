@@ -1,4 +1,4 @@
-export type Category = 'KOPI' | 'NON_KOPI' | 'MAKANAN' | 'CEMILAN' | 'ROKOK';
+export type Category = 'KOPI' | 'NON_KOPI' | 'MAKANAN' | 'CEMILAN' | 'ROKOK' | 'GAMES';
 
 export interface Product {
   id: string;
