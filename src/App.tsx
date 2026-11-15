@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Product, Transaction, Category } from './types';
+import { Product, Transaction, Category, Expense } from './types';
 import { INITIAL_PRODUCTS } from './data';
 import Dashboard from './components/Dashboard';
 import POS from './components/POS';
@@ -80,6 +80,7 @@ function AppContent() {
   // Core Synchronization States loaded from Firebase Cloud Database
   const [products, setProducts] = useState<Product[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   
   // Struk Receipt Modal Control
   const [activeReceipt, setActiveReceipt] = useState<Transaction | null>(null);
@@ -145,6 +146,23 @@ function AppContent() {
       console.log('[STAGE 8: LIVE SYNC LISTENER] Detaching observer from firestore transactions');
       unsubscribe();
     };
+  }, []);
+
+  // Live Sync Expenses from Firestore
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'expenses'), (snapshot) => {
+      const expList: Expense[] = [];
+      snapshot.forEach((document) => {
+        expList.push({ id: document.id, ...document.data() } as Expense);
+      });
+      expList.sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+      setExpenses(expList);
+    }, (error) => {
+      console.error('Firestore expenses snapshot error:', error);
+      handleFirestoreError(error, OperationType.GET, 'expenses');
+    });
+
+    return () => unsubscribe();
   }, []);
 
   // Update clock every second
@@ -225,6 +243,31 @@ function AppContent() {
       await deleteDoc(doc(db, 'products', id));
     } catch (error) {
       console.error('Error deleting product from Firestore:', error);
+    }
+  };
+
+  // Expense Handlers
+  const handleAddExpense = async (expenseData: Omit<Expense, 'id' | 'createdAt'>) => {
+    const freshExpId = 'exp-' + Date.now();
+    const newExpense: Expense = {
+      ...expenseData,
+      id: freshExpId,
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      await setDoc(doc(db, 'expenses', freshExpId), sanitizeFirestoreData(newExpense));
+    } catch (error) {
+      console.error('Error adding expense to Firestore:', error);
+      handleFirestoreError(error, OperationType.WRITE, `expenses/${freshExpId}`);
+    }
+  };
+
+  const handleDeleteExpense = async (expenseId: string) => {
+    try {
+      await deleteDoc(doc(db, 'expenses', expenseId));
+    } catch (error) {
+      console.error('Error deleting expense from Firestore:', error);
+      handleFirestoreError(error, OperationType.DELETE, `expenses/${expenseId}`);
     }
   };
 
@@ -530,8 +573,11 @@ function AppContent() {
             <Dashboard 
               transactions={transactions}
               products={products}
+              expenses={expenses}
               onNavigateToPOS={() => setActiveTab('POS')}
               onClearAllTransactions={handleClearAllTransactions}
+              onAddExpense={handleAddExpense}
+              onDeleteExpense={handleDeleteExpense}
             />
           )}
 

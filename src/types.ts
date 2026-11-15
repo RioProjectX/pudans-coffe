@@ -59,3 +59,21 @@ export interface DayReport {
   revenue: number;
   transactionsCount: number;
 }
+
+export type ExpenseCategory = 'BELANJA' | 'GAJI_KARYAWAN' | 'TOKEN_LISTRIK' | 'TAGIHAN_WIFI';
+
+export interface ExpenseItem {
+  name: string;
+  qty?: string;
+  amount: number;
+}
+
+export interface Expense {
+  id: string;
+  category: ExpenseCategory;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  description?: string;
+  items?: ExpenseItem[];
+  createdAt: string; // ISO string
+}

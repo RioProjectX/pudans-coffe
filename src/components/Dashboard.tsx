@@ -1,21 +1,39 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Transaction, Product } from '../types';
-import { TrendingUp, DollarSign, ShoppingBag, Award, Clock, ArrowUpRight, ArrowDownRight, Coffee, Utensils, AlertCircle, Trash2, RotateCcw, Calendar, Users, Trophy, Crown } from 'lucide-react';
+import { Transaction, Product, Expense } from '../types';
+import { TrendingUp, DollarSign, ShoppingBag, Award, Clock, ArrowUpRight, ArrowDownRight, Coffee, Utensils, AlertCircle, Trash2, RotateCcw, Calendar, Users, Trophy, Crown, Wallet, Lock } from 'lucide-react';
+import ExpenseMachineModal from './ExpenseMachineModal';
 
 interface DashboardProps {
   transactions: Transaction[];
   products: Product[];
+  expenses?: Expense[];
   onNavigateToPOS: () => void;
   onClearAllTransactions?: () => void;
+  onAddExpense?: (expense: Omit<Expense, 'id' | 'createdAt'>) => Promise<void>;
+  onDeleteExpense?: (expenseId: string) => Promise<void>;
 }
 
-export default function Dashboard({ transactions, products, onNavigateToPOS, onClearAllTransactions }: DashboardProps) {
+export default function Dashboard({
+  transactions,
+  products,
+  expenses = [],
+  onNavigateToPOS,
+  onClearAllTransactions,
+  onAddExpense,
+  onDeleteExpense,
+}: DashboardProps) {
   const [hoveredPoint, setHoveredPoint] = useState<{ dateKey: string; day: string; value: number; x: number; y: number } | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [chartPeriod, setChartPeriod] = useState<'7' | '30' | 'ALL'>('ALL');
   const chartScrollRef = useRef<HTMLDivElement>(null);
   const [resetCode, setResetCode] = useState('');
   const [resetError, setResetError] = useState('');
+
+  // Expense Machine password gate & modal state
+  const [showExpenseAuthModal, setShowExpenseAuthModal] = useState(false);
+  const [expenseAuthCode, setExpenseAuthCode] = useState('');
+  const [expenseAuthError, setExpenseAuthError] = useState('');
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
 
   // Daily transaction detail filter state
   const [showTrxFilterModal, setShowTrxFilterModal] = useState(false);
@@ -452,6 +470,20 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
                 <RotateCcw size={15} /> RESET
               </button>
             )}
+            <button
+              id="dash-btn-expense"
+              type="button"
+              onClick={() => {
+                setExpenseAuthCode('');
+                setExpenseAuthError('');
+                setShowExpenseAuthModal(true);
+              }}
+              aria-label="Mesin Pengeluaran"
+              title="Mesin Pengeluaran"
+              className="bg-stone-850/50 hover:bg-stone-800 text-[#F5F2ED] px-4 py-2.5 rounded-xl transition duration-200 flex items-center justify-center border border-white/10 cursor-pointer active:scale-95"
+            >
+              <Wallet size={20} className="text-[#D4A373]" />
+            </button>
           </div>
         </div>
       </div>
@@ -1080,6 +1112,90 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
             </div>
           </div>
         </div>
+      )}
+
+      {/* Password Gate Modal for Mesin Pengeluaran */}
+      {showExpenseAuthModal && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-black/5 p-6 flex flex-col items-center text-center animate-scale-in">
+            <div className="w-12 h-12 bg-[#F5F2ED] text-[#3C2A21] rounded-full flex items-center justify-center mb-4 border border-[#D4A373]/30">
+              <Lock size={20} className="text-[#D4A373]" />
+            </div>
+            <h3 className="font-serif text-base font-bold text-stone-850">Masuk Mesin Pengeluaran</h3>
+            <p className="text-xs text-[#8E8D8A] mt-2 mb-4">
+              Masukkan kata sandi otorisasi untuk mengakses pencatatan pengeluaran &amp; rincian omzet bersih bulanan.
+            </p>
+
+            <form
+              className="w-full"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (expenseAuthCode !== 'pudans123') {
+                  setExpenseAuthError('Kode otorisasi salah, silakan isi kembali.');
+                  return;
+                }
+                setShowExpenseAuthModal(false);
+                setExpenseAuthCode('');
+                setExpenseAuthError('');
+                setShowExpenseModal(true);
+              }}
+            >
+              <div className="w-full mb-5 text-left">
+                <label className="block text-[10px] font-bold text-stone-500 uppercase tracking-widest mb-1.5 font-sans">
+                  Kode Akses Kasir
+                </label>
+                <input
+                  type="password"
+                  autoFocus
+                  value={expenseAuthCode}
+                  onChange={(e) => {
+                    setExpenseAuthCode(e.target.value);
+                    setExpenseAuthError('');
+                  }}
+                  placeholder="Masukkan kode akses..."
+                  className="w-full px-3 py-2 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#D4A373] bg-stone-50 text-xs font-mono font-bold text-stone-800 tracking-widest placeholder:tracking-normal"
+                />
+                {expenseAuthError && (
+                  <p className="text-[11px] text-rose-600 mt-1.5 font-semibold flex items-center gap-1 font-sans">
+                    <AlertCircle size={12} /> {expenseAuthError}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex gap-3 w-full">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowExpenseAuthModal(false);
+                    setExpenseAuthCode('');
+                    setExpenseAuthError('');
+                  }}
+                  className="flex-1 py-2.5 bg-stone-50 hover:bg-stone-100 text-stone-600 rounded-xl text-xs font-semibold transition border border-stone-250 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-[#3C2A21] hover:bg-stone-900 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
+                >
+                  Masuk
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Mesin Pengeluaran & Omzet Bersih Modal */}
+      {onAddExpense && onDeleteExpense && (
+        <ExpenseMachineModal
+          isOpen={showExpenseModal}
+          onClose={() => setShowExpenseModal(false)}
+          transactions={transactions}
+          expenses={expenses}
+          onAddExpense={onAddExpense}
+          onDeleteExpense={onDeleteExpense}
+        />
       )}
     </div>
   );
