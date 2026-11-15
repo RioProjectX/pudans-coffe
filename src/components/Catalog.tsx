@@ -160,6 +160,7 @@ export default function Catalog({ products, onAddProduct, onEditProduct, onDelet
             { label: 'Non-Kopi', value: 'NON_KOPI' },
             { label: 'Makanan', value: 'MAKANAN' },
             { label: 'Cemilan', value: 'CEMILAN' },
+            { label: 'Rokok', value: 'ROKOK' },
           ] as { label: string; value: Category | 'ALL' }[]).map((cat) => (
             <button
               key={cat.value}
@@ -330,6 +331,7 @@ export default function Catalog({ products, onAddProduct, onEditProduct, onDelet
                     <option value="NON_KOPI">🍹 Non-Kopi &amp; Fresh Milk Tea</option>
                     <option value="MAKANAN">🍳 Makanan Utama (Nasi/Pasta/Sandwich)</option>
                     <option value="CEMILAN">🍰 Roti &amp; Kentang Goreng</option>
+                    <option value="ROKOK">🚬 Rokok</option>
                   </select>
                 </div>
 

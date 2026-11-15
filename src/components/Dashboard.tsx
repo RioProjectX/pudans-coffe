@@ -375,7 +375,7 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
 
   // 5. Category distribution
   const categorySplit = useMemo(() => {
-    const counts = { KOPI: 0, NON_KOPI: 0, MAKANAN: 0, CEMILAN: 0 };
+    const counts = { KOPI: 0, NON_KOPI: 0, MAKANAN: 0, CEMILAN: 0, ROKOK: 0 };
     let totalRev = 0;
     
     transactions.forEach(t => {
@@ -394,6 +394,7 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
       { name: 'Non-Kopi & Teh', value: counts.NON_KOPI, color: '#D4A373', percentage: totalRev > 0 ? Math.round((counts.NON_KOPI / totalRev) * 100) : 0 },
       { name: 'Makanan Utama', value: counts.MAKANAN, color: '#8E8D8A', percentage: totalRev > 0 ? Math.round((counts.MAKANAN / totalRev) * 100) : 0 },
       { name: 'Roti & Cemilan', value: counts.CEMILAN, color: '#EAE7E2', percentage: totalRev > 0 ? Math.round((counts.CEMILAN / totalRev) * 100) : 0 },
+      { name: 'Rokok', value: counts.ROKOK, color: '#A8A29E', percentage: totalRev > 0 ? Math.round((counts.ROKOK / totalRev) * 100) : 0 },
     ];
   }, [transactions]);
 
@@ -404,6 +405,7 @@ export default function Dashboard({ transactions, products, onNavigateToPOS, onC
       case 'NON_KOPI': return 'Non-Kopi';
       case 'MAKANAN': return 'Makanan';
       case 'CEMILAN': return 'Cemilan';
+      case 'ROKOK': return 'Rokok';
       default: return cat;
     }
   };

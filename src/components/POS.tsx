@@ -390,6 +390,7 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
     { label: '🍹 Non-Kopi', value: 'NON_KOPI' },
     { label: '🍳 Makanan', value: 'MAKANAN' },
     { label: '🍰 Cemilan', value: 'CEMILAN' },
+    { label: '🚬 Rokok', value: 'ROKOK' },
   ];
 
   const getProductCountInCart = (prodId: string) => {
@@ -783,7 +784,7 @@ export default function POS({ products, userRole = 'KASIR', onCheckout }: POSPro
                       {/* Card Category Header Line */}
                       <div className="flex justify-between items-center gap-1.5 mb-2.5">
                         <span className="text-[9px] text-[#3C2A21] bg-[#F5F2ED] border border-black/5 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                          {p.category === 'KOPI' ? 'Kopi' : p.category === 'NON_KOPI' ? 'Non-Kopi' : p.category === 'MAKANAN' ? 'Makanan' : 'Cemilan'}
+                          {p.category === 'KOPI' ? 'Kopi' : p.category === 'NON_KOPI' ? 'Non-Kopi' : p.category === 'MAKANAN' ? 'Makanan' : p.category === 'ROKOK' ? 'Rokok' : 'Cemilan'}
                         </span>
 
                         <div className="flex gap-1.5 items-center">
