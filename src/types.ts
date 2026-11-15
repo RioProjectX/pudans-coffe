@@ -60,7 +60,12 @@ export interface DayReport {
   transactionsCount: number;
 }
 
-export type ExpenseCategory = 'BELANJA' | 'GAJI_KARYAWAN' | 'TOKEN_LISTRIK' | 'TAGIHAN_WIFI';
+export type ExpenseCategory =
+  | 'BELANJA'
+  | 'GAJI_KARYAWAN'
+  | 'TOKEN_LISTRIK'
+  | 'TAGIHAN_WIFI'
+  | 'TAGIHAN_PDAM';
 
 export interface ExpenseItem {
   name: string;

@@ -566,7 +566,7 @@ export default function Dashboard({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Sales Trend Chart (SVG curves) */}
-        <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-black/5 shadow-sm">
+        <div className="lg:col-span-2 min-w-0 bg-white p-5 rounded-2xl border border-black/5 shadow-sm">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
             <div>
               <h3 className="font-serif text-lg font-bold text-stone-800">
@@ -756,7 +756,7 @@ export default function Dashboard({
         </div>
 
         {/* Category Split */}
-        <div className="bg-white p-5 rounded-2xl border border-black/5 shadow-sm flex flex-col justify-between">
+        <div className="min-w-0 bg-white p-5 rounded-2xl border border-black/5 shadow-sm flex flex-col justify-between">
           <div>
             <h3 className="font-serif text-lg font-bold text-stone-800">Kontribusi Kategori</h3>
             <p className="text-xs text-[#8E8D8A]">Pembagian pendapatan per kategori produk</p>
@@ -791,7 +791,7 @@ export default function Dashboard({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* Menu Terlaris Card */}
-        <div className="bg-white p-5 rounded-2xl border border-black/5 shadow-sm flex flex-col">
+        <div className="min-w-0 bg-white p-5 rounded-2xl border border-black/5 shadow-sm flex flex-col">
           <div className="mb-4">
             <h3 className="font-serif text-lg font-bold text-stone-800 flex items-center gap-2">
               <Award className="text-amber-500 fill-amber-100" size={20} /> 5 Menu Terlaris (Top-Seller)

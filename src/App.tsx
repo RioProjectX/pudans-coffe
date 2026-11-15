@@ -173,6 +173,47 @@ function AppContent() {
     return () => clearInterval(timer);
   }, []);
 
+  // Prevent accidental pinch, gesture, or browser zoom on tablet/touchscreen
+  useEffect(() => {
+    const preventPinchZoom = (e: TouchEvent) => {
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
+    };
+    const preventGesture = (e: Event) => {
+      e.preventDefault();
+    };
+    const preventWheelZoom = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+      }
+    };
+    const preventKeyZoom = (e: KeyboardEvent) => {
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        (e.key === '+' || e.key === '-' || e.key === '=' || e.key === '0')
+      ) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('touchstart', preventPinchZoom, { passive: false });
+    document.addEventListener('touchmove', preventPinchZoom, { passive: false });
+    document.addEventListener('gesturestart', preventGesture);
+    document.addEventListener('gesturechange', preventGesture);
+    document.addEventListener('wheel', preventWheelZoom, { passive: false });
+    document.addEventListener('keydown', preventKeyZoom);
+
+    return () => {
+      document.removeEventListener('touchstart', preventPinchZoom);
+      document.removeEventListener('touchmove', preventPinchZoom);
+      document.removeEventListener('gesturestart', preventGesture);
+      document.removeEventListener('gesturechange', preventGesture);
+      document.removeEventListener('wheel', preventWheelZoom);
+      document.removeEventListener('keydown', preventKeyZoom);
+    };
+  }, []);
+
   const handleClearAllTransactions = async () => {
     try {
       const querySnapshot = await getDocs(collection(db, 'transactions'));
@@ -472,62 +513,71 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F2ED] text-[#1A1A1A] font-sans flex flex-col">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#F5F2ED] text-[#1A1A1A] font-sans flex flex-col">
       
       {/* Premium Coffee Header Nav bar */}
-      <header className="bg-[#3C2A21] text-white sticky top-0 z-40 border-b border-black/5 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <header className="bg-[#3C2A21] text-white sticky top-0 z-40 border-b border-black/5 shadow-sm w-full overflow-hidden">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
           
-          {/* Logo brand and clock */}
-          <div className="flex items-center gap-3.5">
-            <div className="bg-[#D4A373] p-2.5 rounded-full border border-white/10 shadow-inner flex items-center justify-center text-white transform hover:rotate-12 transition">
-              <Coffee size={20} className="fill-[#FBF9F6]" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-serif text-lg font-bold tracking-tight text-[#FBF9F6]">
-                  Pudan's Coffee
-                </h1>
-                <span className="bg-[#D4A373]/30 text-[#F5F2ED] border border-[#D4A373]/20 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono">
-                  POS Premium
-                </span>
+          {/* Top row on Mobile/Tablet: Logo brand & clock + Bluetooth button */}
+          <div className="flex flex-wrap items-center justify-between gap-3 min-w-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="bg-[#D4A373] p-2.5 rounded-full border border-white/10 shadow-inner flex items-center justify-center text-white transform hover:rotate-12 transition flex-shrink-0">
+                <Coffee size={20} className="fill-[#FBF9F6]" />
               </div>
-              
-              {/* WIB clock */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-1">
-                <div className="flex items-center gap-1.5 text-[10px] text-[#F5F2ED]/60 font-mono">
-                  <Clock size={11} className="text-[#D4A373]" />
-                  <span>
-                    {currentTime.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} • {currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} WIB
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="font-serif text-lg font-bold tracking-tight text-[#FBF9F6] truncate">
+                    Pudan's Coffee
+                  </h1>
+                  <span className="bg-[#D4A373]/30 text-[#F5F2ED] border border-[#D4A373]/20 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono">
+                    POS Premium
                   </span>
                 </div>
+                
+                {/* WIB clock & Role */}
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1">
+                  <div className="flex items-center gap-1.5 text-[10px] text-[#F5F2ED]/60 font-mono">
+                    <Clock size={11} className="text-[#D4A373] flex-shrink-0" />
+                    <span className="truncate">
+                      {currentTime.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} • {currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} WIB
+                    </span>
+                  </div>
 
-                <div className="flex items-center gap-1 bg-black/20 p-0.5 rounded-lg border border-white/5 text-[9px] font-mono">
-                  <span className="text-white/40 px-1 text-[8px] uppercase font-bold">Role:</span>
-                  {(['KASIR', 'ADMIN', 'OWNER'] as const).map((role) => (
-                    <button
-                      key={role}
-                      onClick={() => setUserRole(role)}
-                      className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase transition cursor-pointer ${
-                        userRole === role
-                          ? 'bg-[#D4A373] text-white shadow-sm'
-                          : 'text-white/55 hover:text-white hover:bg-white/5'
-                      }`}
-                    >
-                      {role}
-                    </button>
-                  ))}
+                  <div className="flex items-center gap-1 bg-black/20 p-0.5 rounded-lg border border-white/5 text-[9px] font-mono">
+                    <span className="text-white/40 px-1 text-[8px] uppercase font-bold">Role:</span>
+                    {(['KASIR', 'ADMIN', 'OWNER'] as const).map((role) => (
+                      <button
+                        key={role}
+                        onClick={() => setUserRole(role)}
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase transition cursor-pointer ${
+                          userRole === role
+                            ? 'bg-[#D4A373] text-white shadow-sm'
+                            : 'text-white/55 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {role}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
+            </div>
+
+            {/* Bluetooth action visible beside brand on Mobile & Tablet */}
+            <div className="xl:hidden flex-shrink-0">
+              <BluetoothHeaderButton />
             </div>
           </div>
 
           {/* Action controls & navigation */}
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-            <BluetoothHeaderButton />
+          <div className="flex items-center justify-between xl:justify-end gap-3 w-full xl:w-auto min-w-0">
+            <div className="hidden xl:block flex-shrink-0">
+              <BluetoothHeaderButton />
+            </div>
 
             {/* Navigation layout items */}
-            <nav className="flex bg-black/15 p-1 rounded-2xl border border-white/5 w-full sm:w-auto overflow-x-auto">
+            <nav className="flex items-center justify-start sm:justify-between xl:justify-start bg-black/15 p-1 rounded-2xl border border-white/5 w-full xl:w-auto overflow-x-auto max-w-full min-w-0">
             {([
               { id: 'DASHBOARD', label: 'Monitor', icon: LayoutDashboard },
               { id: 'POS', label: 'Kasir (POS)', icon: ShoppingBag },
@@ -544,7 +594,7 @@ function AppContent() {
                   key={tab.id}
                   id={`nav-tab-${tab.id}`}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 whitespace-nowrap cursor-pointer
+                  className={`flex items-center justify-center gap-1.5 px-3 xl:px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 whitespace-nowrap cursor-pointer flex-shrink-0 sm:flex-1 xl:flex-initial
                     ${isSelected 
                       ? 'bg-[#D4A373] text-white shadow-sm' 
                       : 'text-white/70 hover:text-white hover:bg-white/5'}`}
@@ -565,7 +615,7 @@ function AppContent() {
     </header>
 
       {/* Main interactive viewport panels */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 min-w-0">
         
         {/* State views transitions */}
         <div className="animate-in fade-in duration-300">

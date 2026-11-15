@@ -6,6 +6,23 @@
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
 }
 
+@layer base {
+  html,
+  body {
+    overflow-x: hidden;
+    max-width: 100%;
+    overscroll-behavior-x: none;
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  #root {
+    overflow-x: hidden;
+    max-width: 100%;
+    touch-action: manipulation;
+  }
+}
+
 /* Custom fine utility scrollbars and animations */
 ::-webkit-scrollbar {
   width: 6px;

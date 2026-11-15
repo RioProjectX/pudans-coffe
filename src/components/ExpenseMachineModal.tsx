@@ -17,6 +17,7 @@ import {
   ListChecks,
   ChevronLeft,
   ChevronRight,
+  Droplets,
 } from 'lucide-react';
 
 interface ExpenseMachineModalProps {
@@ -65,17 +66,24 @@ const EXPENSE_CATEGORIES: {
   },
   {
     value: 'TOKEN_LISTRIK',
-    label: 'Token Listrik',
+    label: 'Token',
     placeholder: 'Contoh: Token listrik PLN 200.000',
     icon: Zap,
     badgeClass: 'bg-yellow-50 text-yellow-800 border-yellow-200',
   },
   {
     value: 'TAGIHAN_WIFI',
-    label: 'Tagihan WiFi',
+    label: 'WiFi',
     placeholder: 'Contoh: Tagihan internet bulanan kedai',
     icon: Wifi,
     badgeClass: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+  },
+  {
+    value: 'TAGIHAN_PDAM',
+    label: 'PDAM',
+    placeholder: 'Contoh: Tagihan air PDAM bulan ini',
+    icon: Droplets,
+    badgeClass: 'bg-cyan-50 text-cyan-800 border-cyan-200',
   },
 ];
 
@@ -189,15 +197,17 @@ export default function ExpenseMachineModal({
     let gajiTotal = 0;
     let listrikTotal = 0;
     let wifiTotal = 0;
+    let pdamTotal = 0;
 
     monthExpenses.forEach((e) => {
       if (e.category === 'BELANJA') belanjaTotal += e.amount;
       else if (e.category === 'GAJI_KARYAWAN') gajiTotal += e.amount;
       else if (e.category === 'TOKEN_LISTRIK') listrikTotal += e.amount;
       else if (e.category === 'TAGIHAN_WIFI') wifiTotal += e.amount;
+      else if (e.category === 'TAGIHAN_PDAM') pdamTotal += e.amount;
     });
 
-    const totalExpenses = belanjaTotal + gajiTotal + listrikTotal + wifiTotal;
+    const totalExpenses = belanjaTotal + gajiTotal + listrikTotal + wifiTotal + pdamTotal;
     const netRevenue = grossRevenue - totalExpenses;
 
     return {
@@ -208,6 +218,7 @@ export default function ExpenseMachineModal({
       gajiTotal,
       listrikTotal,
       wifiTotal,
+      pdamTotal,
       totalExpenses,
       netRevenue,
     };
@@ -458,7 +469,7 @@ export default function ExpenseMachineModal({
                 Mesin Pengeluaran &amp; Omzet Bersih
               </h2>
               <p className="text-xs text-stone-300">
-                Catat detail Belanja, Gaji Karyawan, Token Listrik, &amp; Tagihan WiFi serta hitung omzet bersih bulanan
+                Catat detail Belanja, Gaji Karyawan, Token Listrik, Tagihan WiFi, &amp; PDAM serta hitung omzet bersih bulanan
               </p>
             </div>
           </div>
@@ -534,6 +545,7 @@ export default function ExpenseMachineModal({
                   <span>• Gaji: {(monthlySummary.gajiTotal / 1000).toFixed(0)}k</span>
                   <span>• Listrik: {(monthlySummary.listrikTotal / 1000).toFixed(0)}k</span>
                   <span>• WiFi: {(monthlySummary.wifiTotal / 1000).toFixed(0)}k</span>
+                  <span>• PDAM: {(monthlySummary.pdamTotal / 1000).toFixed(0)}k</span>
                 </div>
               </div>
 
@@ -830,12 +842,12 @@ export default function ExpenseMachineModal({
               </div>
             )}
 
-            {/* 4 Expense Category Selector Buttons */}
+            {/* 5 Expense Category Selector Buttons */}
             <div className="space-y-2">
               <label className="text-[11px] font-bold uppercase tracking-wider text-stone-500 block">
                 Jenis Pengeluaran
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                 {EXPENSE_CATEGORIES.map((cat) => {
                   const Icon = cat.icon;
                   const active = category === cat.value;
